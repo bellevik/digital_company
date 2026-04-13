@@ -1,0 +1,150 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 196, 61, 0.35), transparent 35%),
+    linear-gradient(160deg, #f2efe7 0%, #dbe4f0 100%);
+  color: #102033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+code {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
+.app-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 5rem;
+}
+
+.hero {
+  padding: 2.5rem;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  box-shadow: 0 20px 60px rgba(16, 32, 51, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  color: #7b4f1d;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.6rem, 8vw, 5rem);
+  line-height: 0.92;
+}
+
+.lede {
+  max-width: 40rem;
+  margin: 1rem 0 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #364c63;
+}
+
+.status-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: rgba(16, 32, 51, 0.92);
+  color: #f8fafc;
+}
+
+.status-panel h2 {
+  margin: 0.75rem 0 0.5rem;
+}
+
+.status-panel p {
+  margin: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.badge-loading {
+  background: rgba(248, 196, 113, 0.2);
+  color: #f8c471;
+}
+
+.badge-online {
+  background: rgba(52, 211, 153, 0.18);
+  color: #6ee7b7;
+}
+
+.badge-offline {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+}
+
+.status-copy {
+  max-width: 22rem;
+  line-height: 1.6;
+  color: #d8e2ef;
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.phase-card {
+  padding: 1.25rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  min-height: 170px;
+}
+
+.phase-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.phase-card p {
+  margin: 0;
+  line-height: 1.6;
+  color: #42576c;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  .hero {
+    padding: 1.5rem;
+  }
+
+  .status-panel {
+    flex-direction: column;
+  }
+}
+

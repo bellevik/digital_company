@@ -1,0 +1,2 @@
+"""Digital Company backend package."""
+
