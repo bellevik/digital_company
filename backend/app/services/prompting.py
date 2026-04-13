@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from app.models.agent import Agent
 from app.models.common import AgentRole, TaskType
-from app.models.memory import Memory
+from app.schemas.memory_search import MemorySearchResult
 from app.models.task import Task
 
 
@@ -67,7 +67,7 @@ def get_role_profile(role: AgentRole) -> RoleProfile:
     return ROLE_PROFILES[role]
 
 
-def build_prompt(*, agent: Agent, task: Task, memories: list[Memory]) -> str:
+def build_prompt(*, agent: Agent, task: Task, memories: list[MemorySearchResult]) -> str:
     role_profile = get_role_profile(agent.role)
     memory_block = _format_memories(memories)
 
@@ -105,11 +105,14 @@ Omit follow_up_tasks when none are needed. Do not include markdown fences.
 """
 
 
-def _format_memories(memories: list[Memory]) -> str:
+def _format_memories(memories: list[MemorySearchResult]) -> str:
     if not memories:
         return "No prior memory available."
 
     lines = []
     for memory in memories:
-        lines.append(f"- [{memory.type.value}] {memory.summary}: {memory.content}")
+        lines.append(
+            f"- [{memory.type.value}] {memory.summary} "
+            f"(score={memory.combined_score:.3f}): {memory.content}"
+        )
     return "\n".join(lines)

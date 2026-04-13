@@ -15,13 +15,15 @@ class FakeExecutionAdapter:
             exit_code=exit_code,
             command=["fake-executor"],
         )
+        self.prompts: list[str] = []
 
     def run(self, *, prompt: str) -> ExecutionResult:
+        self.prompts.append(prompt)
         return self._result
 
 
 def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient) -> None:
-    app.dependency_overrides[execution_adapter_dependency] = lambda: FakeExecutionAdapter(
+    adapter = FakeExecutionAdapter(
         stdout=(
             '{"summary":"Implemented the first worker pass.",'
             '"memory_summary":"Worker completed feature",'
@@ -31,6 +33,7 @@ def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient
             '"type":"review","project_id":"platform"}]}'
         )
     )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
     agent = client.post("/api/v1/agents", json={"name": "worker-dev", "role": "developer"}).json()
     task = client.post(
         "/api/v1/tasks",
@@ -65,6 +68,7 @@ def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient
     task_runs = task_runs_response.json()
     assert len(task_runs) == 1
     assert task_runs[0]["task_id"] == task["id"]
+    assert adapter.prompts
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 
@@ -119,5 +123,47 @@ def test_run_agent_once_marks_task_failed_on_executor_error(client: TestClient) 
 
     tasks = client.get("/api/v1/tasks").json()
     assert tasks[0]["status"] == "failed"
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_memory_search_and_worker_prompt_use_retrieved_context(client: TestClient) -> None:
+    create_memory = client.post(
+        "/api/v1/memory",
+        json={
+            "type": "decision",
+            "summary": "Use Postgres task locking",
+            "content": "Atomic row updates prevent two workers from claiming the same task.",
+        },
+    )
+    assert create_memory.status_code == 201
+
+    search_response = client.get(
+        "/api/v1/memory/search",
+        params={"query": "atomic task locking", "strategy": "hybrid"},
+    )
+    assert search_response.status_code == 200
+    search_payload = search_response.json()
+    assert len(search_payload) == 1
+    assert search_payload[0]["summary"] == "Use Postgres task locking"
+    assert search_payload[0]["combined_score"] > 0
+
+    adapter = FakeExecutionAdapter(stdout='{"summary":"done","follow_up_tasks":[]}')
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    agent = client.post("/api/v1/agents", json={"name": "arch-1", "role": "architect"}).json()
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Design task locking",
+            "description": "Use prior knowledge about atomic task locking.",
+            "type": "research",
+        },
+    )
+
+    work_response = client.post(f"/api/v1/agents/{agent['id']}/work")
+    assert work_response.status_code == 200
+    assert adapter.prompts
+    assert "Use Postgres task locking" in adapter.prompts[0]
+    assert "score=" in adapter.prompts[0]
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)

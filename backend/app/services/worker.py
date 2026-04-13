@@ -18,6 +18,7 @@ from app.models.task_run import TaskRun
 from app.repositories.task_repository import TaskClaimConflictError, claim_task
 from app.schemas.worker import WorkerCycleResponse, WorkerExecutionPayload
 from app.services.execution import ExecutionAdapter, ExecutionResult
+from app.services.memory import MemoryService
 from app.services.prompting import get_role_profile, build_prompt
 
 
@@ -72,7 +73,7 @@ class WorkerService:
                 prompt = build_prompt(
                     agent=agent,
                     task=task,
-                    memories=self._recent_memories(task=task),
+                    memories=self._retrieved_memories(task=task),
                 )
                 run = TaskRun(
                     task_id=task.id,
@@ -99,17 +100,16 @@ class WorkerService:
 
         return None
 
-    def _recent_memories(self, *, task: Task) -> list[Memory]:
-        query = select(Memory).order_by(Memory.created_at.desc()).limit(self._settings.worker_memory_window)
-        if task.project_id is not None:
-            query = (
-                select(Memory)
-                .join(Task, Memory.source_task_id == Task.id, isouter=True)
-                .where((Task.project_id == task.project_id) | (Memory.source_task_id.is_(None)))
-                .order_by(Memory.created_at.desc())
-                .limit(self._settings.worker_memory_window)
-            )
-        return list(self._db.scalars(query).all())
+    def _retrieved_memories(self, *, task: Task):
+        memory_service = MemoryService(db=self._db, settings=self._settings)
+        query = f"{task.title}\n{task.description}"
+        return memory_service.search_memories(
+            query=query,
+            limit=self._settings.worker_memory_window,
+            project_id=task.project_id,
+            source_task_id=task.id,
+            strategy="hybrid",
+        )
 
     def _execute_prompt(self, *, prompt: str) -> ExecutionResult:
         try:
@@ -158,14 +158,12 @@ class WorkerService:
         if payload is not None:
             run.result_payload = payload.model_dump(mode="json")
             if payload.memory_summary or payload.memory_content:
-                memory = Memory(
-                    type=MemoryType.TASK_RESULT,
+                memory = MemoryService(db=self._db, settings=self._settings).create_memory(
+                    memory_type=MemoryType.TASK_RESULT,
                     summary=payload.memory_summary or payload.summary,
                     content=payload.memory_content or payload.summary,
                     source_task_id=task.id,
                 )
-                self._db.add(memory)
-                self._db.flush()
                 memory_id = memory.id
                 self._db.add(
                     TaskEvent(
