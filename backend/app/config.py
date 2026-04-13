@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     app_name: str = "Digital Company"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
+    worker_memory_window: int = 5
+
+    codex_execution_backend: str = "codex_cli"
+    codex_cli_command: str = "codex"
+    codex_cli_subcommand: str = "exec"
+    codex_cli_full_auto_flag: str = "--full-auto"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -30,4 +36,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

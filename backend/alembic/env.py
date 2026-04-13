@@ -7,7 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import get_settings
 from app.db.base import Base
-from app.models import agent, embedding, memory, task, task_event
+from app.models import agent, embedding, memory, task, task_event, task_run
 
 config = context.config
 
@@ -54,4 +54,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

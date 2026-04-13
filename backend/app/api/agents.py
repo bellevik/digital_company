@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import db_session_dependency
+from app.api.dependencies import db_session_dependency, execution_adapter_dependency
+from app.config import get_settings
 from app.models.agent import Agent
 from app.models.common import AgentStatus, EventType
 from app.models.task_event import TaskEvent
 from app.schemas.agent import AgentCreate, AgentRead
+from app.schemas.worker import WorkerCycleResponse
+from app.services.execution import ExecutionAdapter
+from app.services.worker import WorkerService
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -34,3 +40,19 @@ def create_agent(payload: AgentCreate, db: Session = Depends(db_session_dependen
     db.refresh(agent)
     return agent
 
+
+@router.post("/{agent_id}/work", response_model=WorkerCycleResponse)
+def run_agent_once(
+    agent_id: uuid.UUID,
+    db: Session = Depends(db_session_dependency),
+    execution_adapter: ExecutionAdapter = Depends(execution_adapter_dependency),
+) -> WorkerCycleResponse:
+    service = WorkerService(
+        db=db,
+        execution_adapter=execution_adapter,
+        settings=get_settings(),
+    )
+    try:
+        return service.run_agent_once(agent_id=agent_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found") from exc

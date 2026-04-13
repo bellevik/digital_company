@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies import db_session_dependency
 from app.db.base import Base
 from app.main import app
-from app.models import agent, embedding, memory, task, task_event
+from app.models import agent, embedding, memory, task, task_event, task_run
 
 
 @pytest.fixture
@@ -41,4 +41,3 @@ def client(session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-

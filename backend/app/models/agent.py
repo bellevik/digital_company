@@ -36,3 +36,4 @@ class Agent(TimestampMixin, Base):
         foreign_keys="Task.assigned_agent_id",
     )
     events: Mapped[list["TaskEvent"]] = relationship("TaskEvent", back_populates="agent")
+    task_runs: Mapped[list["TaskRun"]] = relationship("TaskRun", back_populates="agent")

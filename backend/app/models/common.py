@@ -62,5 +62,11 @@ class EventType(str, enum.Enum):
     MEMORY_CREATED = "memory_created"
 
 
+class TaskRunStatus(str, enum.Enum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 def uuid_primary_key() -> Mapped[uuid.UUID]:
     return mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)

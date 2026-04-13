@@ -20,6 +20,14 @@ Phase 1 adds the first working backend domain:
 - API endpoints for task, agent, and memory creation/listing
 - Backend tests for the initial workflow
 
+Phase 2 adds the first worker runtime:
+
+- Role-based prompt templates for the agent system
+- Task run records capturing prompt, stdout, stderr, exit code, and follow-up count
+- Operator-triggered worker cycle endpoint for running one agent against the queue
+- Codex CLI execution adapter boundary with a mock adapter option for local development and tests
+- Automatic task completion, task-result memory creation, and follow-up task generation
+
 ## Repository Layout
 
 - `backend/`: FastAPI service
@@ -73,8 +81,31 @@ Current Phase 1 API surface:
 - `GET /api/v1/tasks/{task_id}/events`
 - `GET /api/v1/agents`
 - `POST /api/v1/agents`
+- `POST /api/v1/agents/{agent_id}/work`
 - `GET /api/v1/memory`
 - `POST /api/v1/memory`
+- `GET /api/v1/task-runs`
+
+## Worker Runtime
+
+The Phase 2 worker runtime executes a single agent cycle through:
+
+1. Selecting the next compatible `todo` task for the agent role
+2. Claiming it atomically
+3. Building a role-specific prompt with recent memory context
+4. Running the configured execution adapter
+5. Persisting the execution record in `task_runs`
+6. Marking the task `done` or `failed`
+7. Writing a `task_result` memory and optional follow-up tasks
+
+By default the worker uses the Codex CLI:
+
+- `CODEX_EXECUTION_BACKEND=codex_cli`
+- `CODEX_CLI_COMMAND=codex`
+
+For local dry runs without Codex installed you can switch to:
+
+- `CODEX_EXECUTION_BACKEND=mock`
 
 ## Phase Workflow
 
