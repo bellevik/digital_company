@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.models.common import TaskStatus, TaskType, TimestampMixin, uuid_primary_key
+
+
+class Task(TimestampMixin, Base):
+    __tablename__ = "tasks"
+    __table_args__ = (
+        Index("ix_tasks_status", "status"),
+        Index("ix_tasks_project_id", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_primary_key()
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[TaskType] = mapped_column(Enum(TaskType, name="task_type"), nullable=False)
+    status: Mapped[TaskStatus] = mapped_column(
+        Enum(TaskStatus, name="task_status"),
+        default=TaskStatus.TODO,
+        nullable=False,
+    )
+    assigned_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    assigned_agent: Mapped["Agent | None"] = relationship(
+        "Agent",
+        back_populates="assigned_tasks",
+        foreign_keys=[assigned_agent_id],
+    )
+    memories: Mapped[list["Memory"]] = relationship("Memory", back_populates="source_task")
+    events: Mapped[list["TaskEvent"]] = relationship("TaskEvent", back_populates="task")
+
