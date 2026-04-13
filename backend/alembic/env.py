@@ -7,7 +7,16 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import get_settings
 from app.db.base import Base
-from app.models import agent, embedding, memory, task, task_event, task_run
+from app.models import (
+    agent,
+    embedding,
+    memory,
+    review_decision,
+    task,
+    task_event,
+    task_run,
+    task_workflow,
+)
 
 config = context.config
 

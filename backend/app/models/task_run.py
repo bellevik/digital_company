@@ -41,4 +41,8 @@ class TaskRun(TimestampMixin, Base):
 
     task: Mapped["Task"] = relationship("Task", back_populates="task_runs")
     agent: Mapped["Agent"] = relationship("Agent", back_populates="task_runs")
-
+    workflows: Mapped[list["TaskWorkflow"]] = relationship(
+        "TaskWorkflow",
+        foreign_keys="TaskWorkflow.latest_task_run_id",
+        overlaps="latest_task_run",
+    )

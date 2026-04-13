@@ -19,6 +19,8 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
+from app.schemas.workflow import ReviewDecisionCreate, SubmitForReviewRequest, TaskWorkflowRead
+from app.services.workflow import WorkflowService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -132,3 +134,27 @@ def list_task_events(
             .order_by(TaskEvent.created_at.asc())
         ).all()
     )
+
+
+@router.post("/{task_id}/submit-for-review", response_model=TaskWorkflowRead)
+def submit_task_for_review(
+    task_id: uuid.UUID,
+    payload: SubmitForReviewRequest,
+    db: Session = Depends(db_session_dependency),
+) -> TaskWorkflowRead:
+    try:
+        return WorkflowService(db=db).submit_for_review(task_id=task_id, payload=payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+
+
+@router.post("/{task_id}/review-decisions", response_model=TaskWorkflowRead)
+def record_review_decision(
+    task_id: uuid.UUID,
+    payload: ReviewDecisionCreate,
+    db: Session = Depends(db_session_dependency),
+) -> TaskWorkflowRead:
+    try:
+        return WorkflowService(db=db).record_review_decision(task_id=task_id, payload=payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc

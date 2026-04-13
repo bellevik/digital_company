@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies import db_session_dependency
 from app.db.base import Base
 from app.main import app
-from app.models import agent, embedding, memory, task, task_event, task_run
+from app.models import agent, embedding, memory, review_decision, task, task_event, task_run, task_workflow
 
 
 @pytest.fixture

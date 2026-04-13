@@ -35,6 +35,14 @@ Phase 3 upgrades the memory system:
 - Retrieval scoring returned to the operator for visibility
 - Worker prompts now use retrieved memory context instead of recency-only selection
 
+Phase 4 adds the approval workflow:
+
+- Dedicated workflow record per task tied to the latest task run
+- Human review submission with branch tracking and submission notes
+- Review decisions with `approved` or `changes_requested`
+- Operator workflow visibility endpoints
+- Automatic task reopening when changes are requested
+
 ## Repository Layout
 
 - `backend/`: FastAPI service
@@ -93,6 +101,10 @@ Current Phase 1 API surface:
 - `POST /api/v1/memory`
 - `GET /api/v1/memory/search`
 - `GET /api/v1/task-runs`
+- `GET /api/v1/workflows`
+- `GET /api/v1/workflows/{task_id}`
+- `POST /api/v1/tasks/{task_id}/submit-for-review`
+- `POST /api/v1/tasks/{task_id}/review-decisions`
 
 ## Worker Runtime
 
@@ -128,6 +140,17 @@ Example:
 ```bash
 curl "http://localhost:8000/api/v1/memory/search?query=atomic%20task%20locking&strategy=hybrid"
 ```
+
+## Approval Workflow
+
+The Phase 4 approval flow is:
+
+1. Execute a task through the worker runtime
+2. Submit that task for review with a branch name
+3. Inspect workflow state through the workflow endpoints
+4. Record a human review decision
+
+If a reviewer requests changes, the task is reopened to `todo` so it can re-enter the queue.
 
 ## Phase Workflow
 

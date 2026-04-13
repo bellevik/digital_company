@@ -41,3 +41,9 @@ class Task(TimestampMixin, Base):
     memories: Mapped[list["Memory"]] = relationship("Memory", back_populates="source_task")
     events: Mapped[list["TaskEvent"]] = relationship("TaskEvent", back_populates="task")
     task_runs: Mapped[list["TaskRun"]] = relationship("TaskRun", back_populates="task")
+    workflow: Mapped["TaskWorkflow | None"] = relationship("TaskWorkflow", back_populates="task", uselist=False)
+    review_decisions: Mapped[list["ReviewDecision"]] = relationship(
+        "ReviewDecision",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )

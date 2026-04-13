@@ -20,6 +20,7 @@ from app.schemas.worker import WorkerCycleResponse, WorkerExecutionPayload
 from app.services.execution import ExecutionAdapter, ExecutionResult
 from app.services.memory import MemoryService
 from app.services.prompting import get_role_profile, build_prompt
+from app.services.workflow import WorkflowService
 
 
 @dataclass(slots=True)
@@ -211,6 +212,7 @@ class WorkerService:
                 },
             )
         )
+        WorkflowService(db=self._db).ensure_workflow(task=task, latest_task_run_id=run.id)
         self._db.commit()
         self._db.refresh(run)
 

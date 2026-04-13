@@ -68,5 +68,17 @@ class TaskRunStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ApprovalStatus(str, enum.Enum):
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending_approval"
+    APPROVED = "approved"
+    CHANGES_REQUESTED = "changes_requested"
+
+
+class ReviewDecisionType(str, enum.Enum):
+    APPROVED = "approved"
+    CHANGES_REQUESTED = "changes_requested"
+
+
 def uuid_primary_key() -> Mapped[uuid.UUID]:
     return mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
