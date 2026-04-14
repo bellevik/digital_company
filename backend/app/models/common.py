@@ -80,5 +80,17 @@ class ReviewDecisionType(str, enum.Enum):
     CHANGES_REQUESTED = "changes_requested"
 
 
+class SelfImprovementRunStatus(str, enum.Enum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class SelfImprovementTriggerMode(str, enum.Enum):
+    MANUAL = "manual"
+    SCHEDULED = "scheduled"
+    SEEDED = "seeded"
+
+
 def uuid_primary_key() -> Mapped[uuid.UUID]:
     return mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)

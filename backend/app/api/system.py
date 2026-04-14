@@ -17,5 +17,5 @@ def metadata() -> dict[str, str]:
         "name": settings.app_name,
         "environment": settings.app_env,
         "api_prefix": settings.api_v1_prefix,
+        "scheduler_enabled": str(settings.scheduler_enabled).lower(),
     }
-

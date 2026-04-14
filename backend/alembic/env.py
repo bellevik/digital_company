@@ -12,6 +12,7 @@ from app.models import (
     embedding,
     memory,
     review_decision,
+    self_improvement_run,
     task,
     task_event,
     task_run,

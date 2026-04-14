@@ -132,17 +132,49 @@ type WorkerCycleResponse = {
   follow_up_task_ids: string[];
 };
 
-type Toast = {
-  tone: "info" | "success" | "error";
+type SystemSummary = {
+  tasks_total: number;
+  tasks_todo: number;
+  tasks_in_progress: number;
+  tasks_done: number;
+  tasks_failed: number;
+  agents_total: number;
+  agents_idle: number;
+  agents_busy: number;
+  agents_offline: number;
+  workflows_pending: number;
+  memories_total: number;
+  task_runs_total: number;
+  self_improvement_runs_total: number;
+  scheduler_enabled: boolean;
+  scheduler_running: boolean;
+};
+
+type SelfImprovementRun = {
+  id: string;
+  status: "running" | "succeeded" | "failed";
+  trigger_mode: "manual" | "scheduled" | "seeded";
+  summary: string;
+  proposed_branch_name: string;
+  proposed_pr_title: string;
+  created_task_count: number;
+  payload: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SeedDemoResponse = {
+  created_agents: number;
+  created_tasks: number;
+  created_memories: number;
   message: string;
 };
 
-type DashboardData = {
-  tasks: Task[];
-  agents: Agent[];
-  taskRuns: TaskRun[];
-  workflows: Workflow[];
-  memories: Memory[];
+type Toast = {
+  tone: "info" | "success" | "error";
+  message: string;
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -177,6 +209,10 @@ export default function App() {
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [systemSummary, setSystemSummary] = useState<SystemSummary | null>(null);
+  const [selfImprovementRuns, setSelfImprovementRuns] = useState<
+    SelfImprovementRun[]
+  >([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskEvents, setSelectedTaskEvents] = useState<TaskEvent[]>([]);
   const [taskDraft, setTaskDraft] = useState(defaultTaskDraft);
@@ -189,6 +225,8 @@ export default function App() {
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
+  const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,14 +234,23 @@ export default function App() {
     async function load() {
       setIsRefreshing(true);
       try {
-        const [tasksResponse, agentsResponse, taskRunsResponse, workflowsResponse, memoriesResponse] =
-          await Promise.all([
-            apiGet<Task[]>("/api/v1/tasks"),
-            apiGet<Agent[]>("/api/v1/agents"),
-            apiGet<TaskRun[]>("/api/v1/task-runs"),
-            apiGet<Workflow[]>("/api/v1/workflows"),
-            apiGet<Memory[]>("/api/v1/memory"),
-          ]);
+        const [
+          tasksResponse,
+          agentsResponse,
+          taskRunsResponse,
+          workflowsResponse,
+          memoriesResponse,
+          summaryResponse,
+          selfImprovementRunsResponse,
+        ] = await Promise.all([
+          apiGet<Task[]>("/api/v1/tasks"),
+          apiGet<Agent[]>("/api/v1/agents"),
+          apiGet<TaskRun[]>("/api/v1/task-runs"),
+          apiGet<Workflow[]>("/api/v1/workflows"),
+          apiGet<Memory[]>("/api/v1/memory"),
+          apiGet<SystemSummary>("/api/v1/operations/summary"),
+          apiGet<SelfImprovementRun[]>("/api/v1/operations/self-improvement/runs"),
+        ]);
 
         if (cancelled) {
           return;
@@ -214,6 +261,8 @@ export default function App() {
         setTaskRuns(taskRunsResponse);
         setWorkflows(workflowsResponse);
         setMemories(memoriesResponse);
+        setSystemSummary(summaryResponse);
+        setSelfImprovementRuns(selfImprovementRunsResponse);
         setApiState({ status: "online", details: "operator backend reachable" });
         setSelectedTaskId((current) =>
           current && tasksResponse.some((task) => task.id === current)
@@ -302,12 +351,16 @@ export default function App() {
       apiGet<TaskRun[]>("/api/v1/task-runs"),
       apiGet<Workflow[]>("/api/v1/workflows"),
       apiGet<Memory[]>("/api/v1/memory"),
+      apiGet<SystemSummary>("/api/v1/operations/summary"),
+      apiGet<SelfImprovementRun[]>("/api/v1/operations/self-improvement/runs"),
     ]);
     setTasks(payload[0]);
     setAgents(payload[1]);
     setTaskRuns(payload[2]);
     setWorkflows(payload[3]);
     setMemories(payload[4]);
+    setSystemSummary(payload[5]);
+    setSelfImprovementRuns(payload[6]);
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
@@ -462,6 +515,49 @@ export default function App() {
     }
   }
 
+  async function handleRunSelfImprovement() {
+    setIsRunningSelfImprovement(true);
+    try {
+      const payload = await apiPost<SelfImprovementRun>(
+        "/api/v1/operations/self-improvement/run",
+        {},
+      );
+      await refreshDashboard();
+      pushToast(setToast, "success", payload.summary);
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error
+          ? error.message
+          : "Unable to trigger self-improvement.",
+      );
+    } finally {
+      setIsRunningSelfImprovement(false);
+    }
+  }
+
+  async function handleSeedDemo() {
+    setIsSeedingDemo(true);
+    try {
+      const payload = await apiPost<SeedDemoResponse>("/api/v1/operations/seed-demo", {});
+      await refreshDashboard();
+      pushToast(
+        setToast,
+        "success",
+        `${payload.message} ${payload.created_agents} agent(s), ${payload.created_tasks} task(s), ${payload.created_memories} memory record(s).`,
+      );
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to seed demo data.",
+      );
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero">
@@ -495,22 +591,27 @@ export default function App() {
       ) : null}
 
       <section className="overview-grid">
-        <MetricCard label="Tasks" value={String(tasks.length)} detail="live queue" />
+        <MetricCard
+          label="Tasks"
+          value={String(systemSummary?.tasks_total ?? tasks.length)}
+          detail="live queue"
+        />
         <MetricCard
           label="In Progress"
-          value={String(tasks.filter((task) => task.status === "in_progress").length)}
+          value={String(
+            systemSummary?.tasks_in_progress ??
+              tasks.filter((task) => task.status === "in_progress").length,
+          )}
           detail="actively claimed"
         />
         <MetricCard
           label="Pending Review"
-          value={String(
-            workflows.filter((workflow) => workflow.approval_status === "pending_approval").length,
-          )}
+          value={String(systemSummary?.workflows_pending ?? 0)}
           detail="awaiting human decision"
         />
         <MetricCard
           label="Memories"
-          value={String(memories.length)}
+          value={String(systemSummary?.memories_total ?? memories.length)}
           detail="retrieval corpus"
         />
       </section>
@@ -769,6 +870,65 @@ export default function App() {
         </div>
 
         <div className="column">
+          <Panel
+            title="System Operations"
+            subtitle="Seed demo data and run the daily improvement loop"
+          >
+            <div className="form-stack">
+              <div className="workflow-summary">
+                <p>
+                  <strong>Scheduler enabled:</strong>{" "}
+                  {systemSummary?.scheduler_enabled ? "yes" : "no"}
+                </p>
+                <p>
+                  <strong>Scheduler running:</strong>{" "}
+                  {systemSummary?.scheduler_running ? "yes" : "no"}
+                </p>
+                <p>
+                  <strong>Improvement runs:</strong>{" "}
+                  {systemSummary?.self_improvement_runs_total ?? 0}
+                </p>
+              </div>
+              <button
+                className="primary-button"
+                disabled={isSeedingDemo}
+                onClick={() => void handleSeedDemo()}
+                type="button"
+              >
+                {isSeedingDemo ? "Seeding..." : "Seed Demo"}
+              </button>
+              <button
+                className="secondary-button"
+                disabled={isRunningSelfImprovement}
+                onClick={() => void handleRunSelfImprovement()}
+                type="button"
+              >
+                {isRunningSelfImprovement
+                  ? "Running..."
+                  : "Run Self-Improvement"}
+              </button>
+              <div className="entity-list">
+                {selfImprovementRuns.slice(0, 4).map((run) => (
+                  <article className="entity-card" key={run.id}>
+                    <div className="entity-meta">
+                      <div>
+                        <h4>{run.trigger_mode}</h4>
+                        <p>{formatDateTime(run.started_at)}</p>
+                      </div>
+                      <span className={`status-pill status-${mapSelfImprovementStatus(run.status)}`}>
+                        {run.status}
+                      </span>
+                    </div>
+                    <p>{run.summary}</p>
+                    <p className="muted">
+                      {run.proposed_branch_name} • {run.created_task_count} task(s)
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="Agents" subtitle="Create agents and run cycles">
             <form className="form-stack" onSubmit={handleCreateAgent}>
               <label>
@@ -1053,6 +1213,16 @@ function mapAgentStatus(status: AgentStatus) {
     return "in_progress";
   }
   if (status === "offline") {
+    return "failed";
+  }
+  return "done";
+}
+
+function mapSelfImprovementStatus(status: SelfImprovementRun["status"]) {
+  if (status === "running") {
+    return "in_progress";
+  }
+  if (status === "failed") {
     return "failed";
   }
   return "done";

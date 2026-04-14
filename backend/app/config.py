@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     worker_memory_window: int = 5
     memory_embedding_dimensions: int = 1536
     memory_search_candidate_limit: int = 25
+    scheduler_enabled: bool = False
+    self_improvement_interval_seconds: int = 86400
+    self_improvement_branch_prefix: str = "codex/self-improvement"
 
     codex_execution_backend: str = "codex_cli"
     codex_cli_command: str = "codex"

@@ -52,6 +52,14 @@ Phase 5 delivers the operator UI:
 - Memory search console with retrieval scoring
 - Approval controls for review submission and decisions
 
+Phase 6 closes the product:
+
+- Self-improvement runs with proposed branch and PR metadata
+- In-process scheduler for periodic self-improvement loops
+- Operator endpoints for system summary, demo seeding, and manual improvement runs
+- Demo seed path for bringing up a usable system from an empty database
+- Runbook documentation for startup and operations
+
 ## Repository Layout
 
 - `backend/`: FastAPI service
@@ -114,6 +122,10 @@ Current Phase 1 API surface:
 - `GET /api/v1/workflows/{task_id}`
 - `POST /api/v1/tasks/{task_id}/submit-for-review`
 - `POST /api/v1/tasks/{task_id}/review-decisions`
+- `GET /api/v1/operations/summary`
+- `GET /api/v1/operations/self-improvement/runs`
+- `POST /api/v1/operations/self-improvement/run`
+- `POST /api/v1/operations/seed-demo`
 
 ## Worker Runtime
 
@@ -170,6 +182,22 @@ The frontend at `http://localhost:5173` now provides the main operator surface:
 - Inspect task runs and activity
 - Search memory and inspect retrieval scores
 - Submit work for review and record review decisions
+
+## Self-Improvement
+
+Phase 6 adds a daily-style improvement loop with explicit operator visibility:
+
+1. Analyze the current system state
+2. Create improvement tasks when gaps are found
+3. Propose branch and PR metadata for the next improvement cycle
+4. Surface the run history in the UI and API
+
+Scheduler environment variables:
+
+- `SCHEDULER_ENABLED`
+- `SELF_IMPROVEMENT_INTERVAL_SECONDS`
+
+The detailed operating steps live in [`docs/runbook.md`](/Users/bellevik/git/codex/digital_company/docs/runbook.md).
 
 ## Phase Workflow
 
