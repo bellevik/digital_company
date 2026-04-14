@@ -13,6 +13,8 @@ node_modules/
 dist/
 build/
 .vite/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 .idea/
 .vscode/
-

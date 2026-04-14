@@ -43,6 +43,15 @@ Phase 4 adds the approval workflow:
 - Operator workflow visibility endpoints
 - Automatic task reopening when changes are requested
 
+Phase 5 delivers the operator UI:
+
+- Live task board grouped by status
+- Task detail view with activity feed, task runs, and workflow summary
+- Agent console for creation and single-cycle execution
+- Task creation form
+- Memory search console with retrieval scoring
+- Approval controls for review submission and decisions
+
 ## Repository Layout
 
 - `backend/`: FastAPI service
@@ -151,6 +160,16 @@ The Phase 4 approval flow is:
 4. Record a human review decision
 
 If a reviewer requests changes, the task is reopened to `todo` so it can re-enter the queue.
+
+## Operator UI
+
+The frontend at `http://localhost:5173` now provides the main operator surface:
+
+- Create tasks and agents
+- Run agents against the queue
+- Inspect task runs and activity
+- Search memory and inspect retrieval scores
+- Submit work for review and record review decisions
 
 ## Phase Workflow
 
