@@ -10,7 +10,7 @@ def test_health_endpoint(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_create_and_list_tasks(client: TestClient) -> None:
+def test_create_and_list_tasks(client: TestClient, projects_root) -> None:
     create_response = client.post(
         "/api/v1/tasks",
         json={
@@ -24,10 +24,27 @@ def test_create_and_list_tasks(client: TestClient) -> None:
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["status"] == "todo"
+    assert (projects_root / "platform").is_dir()
+    assert (projects_root / "platform" / ".gitkeep").is_file()
 
     list_response = client.get("/api/v1/tasks")
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
+
+
+def test_create_task_rejects_unsafe_project_id(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Bad path",
+            "description": "Should not allow traversal.",
+            "type": "feature",
+            "project_id": "../outside",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "project_id must use only letters, numbers, dots, underscores, or hyphens" in response.json()["detail"]
 
 
 def test_task_claim_is_atomic_for_second_agent(client: TestClient) -> None:

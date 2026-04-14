@@ -1,10 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    repo_root: Path = Path(__file__).resolve().parents[2]
+    projects_root: Path | None = None
     app_name: str = "Digital Company"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
@@ -36,6 +39,11 @@ class Settings(BaseSettings):
             f"{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @computed_field
+    @property
+    def resolved_projects_root(self) -> Path:
+        return self.projects_root or (self.repo_root / "projects")
 
 
 @lru_cache

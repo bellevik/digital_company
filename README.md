@@ -65,6 +65,7 @@ Phase 6 closes the product:
 - `backend/`: FastAPI service
 - `frontend/`: React + Vite operator UI
 - `docs/`: implementation notes and delivery plan
+- `projects/`: task-scoped project workspaces created inside the repo
 
 ## Local Development
 
@@ -97,6 +98,8 @@ Expected local services:
 - Backend: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 - Postgres: `localhost:5432`
+
+Task creation now ensures the repo-local `projects/` workspace exists. When a task uses a new `project_id`, the backend creates `projects/<project_id>/` with a `.gitkeep` so the directory can be committed before real files land there.
 
 ## Backend Commands
 

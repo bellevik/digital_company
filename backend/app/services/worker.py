@@ -19,6 +19,7 @@ from app.repositories.task_repository import TaskClaimConflictError, claim_task
 from app.schemas.worker import WorkerCycleResponse, WorkerExecutionPayload
 from app.services.execution import ExecutionAdapter, ExecutionResult
 from app.services.memory import MemoryService
+from app.services.project_workspace import ProjectWorkspaceService
 from app.services.prompting import get_role_profile, build_prompt
 from app.services.workflow import WorkflowService
 
@@ -112,6 +113,9 @@ class WorkerService:
             strategy="hybrid",
         )
 
+    def _workspace_service(self) -> ProjectWorkspaceService:
+        return ProjectWorkspaceService(settings=self._settings)
+
     def _execute_prompt(self, *, prompt: str) -> ExecutionResult:
         try:
             return self._execution_adapter.run(prompt=prompt)
@@ -176,11 +180,15 @@ class WorkerService:
                 )
 
             for follow_up in payload.follow_up_tasks:
+                project_id = self._workspace_service().normalize_project_id(
+                    follow_up.project_id or task.project_id
+                )
+                self._workspace_service().ensure_project_directory(project_id)
                 next_task = Task(
                     title=follow_up.title,
                     description=follow_up.description,
                     type=follow_up.type,
-                    project_id=follow_up.project_id or task.project_id,
+                    project_id=project_id,
                 )
                 self._db.add(next_task)
                 self._db.flush()

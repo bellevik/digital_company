@@ -22,7 +22,7 @@ class FakeExecutionAdapter:
         return self._result
 
 
-def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient) -> None:
+def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient, projects_root) -> None:
     adapter = FakeExecutionAdapter(
         stdout=(
             '{"summary":"Implemented the first worker pass.",'
@@ -69,6 +69,7 @@ def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient
     assert len(task_runs) == 1
     assert task_runs[0]["task_id"] == task["id"]
     assert adapter.prompts
+    assert (projects_root / "platform").is_dir()
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 

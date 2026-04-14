@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_seed_demo_populates_empty_system(client: TestClient) -> None:
+def test_seed_demo_populates_empty_system(client: TestClient, projects_root) -> None:
     response = client.post("/api/v1/operations/seed-demo")
 
     assert response.status_code == 200
@@ -18,6 +18,8 @@ def test_seed_demo_populates_empty_system(client: TestClient) -> None:
     assert summary_payload["agents_total"] >= 1
     assert summary_payload["tasks_total"] >= 1
     assert summary_payload["memories_total"] >= 1
+    assert (projects_root / "platform").is_dir()
+    assert (projects_root / "operator").is_dir()
 
 
 def test_manual_self_improvement_run_creates_follow_up_tasks(client: TestClient) -> None:

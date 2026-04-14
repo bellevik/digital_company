@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import db_session_dependency
+from app.config import get_settings
 from app.models.common import AgentStatus, EventType, TaskStatus
 from app.models.task import Task
 from app.models.task_event import TaskEvent
@@ -20,6 +21,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.schemas.workflow import ReviewDecisionCreate, SubmitForReviewRequest, TaskWorkflowRead
+from app.services.project_workspace import ProjectWorkspaceService
 from app.services.workflow import WorkflowService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -38,11 +40,18 @@ def list_tasks(
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate, db: Session = Depends(db_session_dependency)) -> Task:
+    workspace_service = ProjectWorkspaceService(settings=get_settings())
+    try:
+        project_id = workspace_service.normalize_project_id(payload.project_id)
+        workspace_service.ensure_project_directory(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
     task = Task(
         title=payload.title,
         description=payload.description,
         type=payload.type,
-        project_id=payload.project_id,
+        project_id=project_id,
     )
     db.add(task)
     db.flush()
@@ -68,8 +77,19 @@ def update_task(
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
+    workspace_service = ProjectWorkspaceService(settings=get_settings())
     previous_agent = task.assigned_agent
     update_data = payload.model_dump(exclude_unset=True)
+    if "project_id" in update_data:
+        try:
+            update_data["project_id"] = workspace_service.normalize_project_id(update_data["project_id"])
+            workspace_service.ensure_project_directory(update_data["project_id"])
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
     for field_name, value in update_data.items():
         setattr(task, field_name, value)
 
