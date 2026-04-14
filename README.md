@@ -81,6 +81,16 @@ Or use:
 make dev
 ```
 
+Convenience scripts are available in `scripts/`:
+
+- `./scripts/START`
+- `./scripts/STOP`
+- `./scripts/RESTART`
+- `./scripts/STATUS`
+- `./scripts/LOGS [service]`
+- `./scripts/MIGRATE`
+- `./scripts/SEED_DEMO`
+
 Expected local services:
 
 - Frontend: `http://localhost:5173`

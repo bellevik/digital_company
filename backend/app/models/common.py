@@ -92,5 +92,9 @@ class SelfImprovementTriggerMode(str, enum.Enum):
     SEEDED = "seeded"
 
 
+def enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_cls]
+
+
 def uuid_primary_key() -> Mapped[uuid.UUID]:
     return mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)

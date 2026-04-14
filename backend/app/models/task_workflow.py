@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.common import ApprovalStatus, TimestampMixin, uuid_primary_key
+from app.models.common import ApprovalStatus, TimestampMixin, enum_values, uuid_primary_key
 
 
 class TaskWorkflow(TimestampMixin, Base):
@@ -25,7 +25,7 @@ class TaskWorkflow(TimestampMixin, Base):
         nullable=True,
     )
     approval_status: Mapped[ApprovalStatus] = mapped_column(
-        Enum(ApprovalStatus, name="approval_status"),
+        Enum(ApprovalStatus, name="approval_status", values_callable=enum_values),
         default=ApprovalStatus.NOT_REQUIRED,
         nullable=False,
     )

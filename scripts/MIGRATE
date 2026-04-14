@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
+
+echo "Running Alembic migrations..."
+compose exec backend alembic upgrade head
+

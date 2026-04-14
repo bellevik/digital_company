@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
+
+echo "Container status:"
+compose ps
+
+echo
+echo "Backend health:"
+curl --fail --silent --show-error "$(api_url localhost)/api/v1/health"
+echo
+

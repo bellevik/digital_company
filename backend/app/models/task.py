@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.common import TaskStatus, TaskType, TimestampMixin, uuid_primary_key
+from app.models.common import TaskStatus, TaskType, TimestampMixin, enum_values, uuid_primary_key
 
 
 class Task(TimestampMixin, Base):
@@ -20,9 +20,12 @@ class Task(TimestampMixin, Base):
     id: Mapped[uuid.UUID] = uuid_primary_key()
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    type: Mapped[TaskType] = mapped_column(Enum(TaskType, name="task_type"), nullable=False)
+    type: Mapped[TaskType] = mapped_column(
+        Enum(TaskType, name="task_type", values_callable=enum_values),
+        nullable=False,
+    )
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, name="task_status"),
+        Enum(TaskStatus, name="task_status", values_callable=enum_values),
         default=TaskStatus.TODO,
         nullable=False,
     )

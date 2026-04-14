@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
+
+if [[ $# -gt 0 ]]; then
+  compose logs -f "$1"
+else
+  compose logs -f
+fi
+

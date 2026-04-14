@@ -11,6 +11,7 @@ from app.models.common import (
     SelfImprovementRunStatus,
     SelfImprovementTriggerMode,
     TimestampMixin,
+    enum_values,
     uuid_primary_key,
 )
 
@@ -21,11 +22,19 @@ class SelfImprovementRun(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = uuid_primary_key()
     status: Mapped[SelfImprovementRunStatus] = mapped_column(
-        Enum(SelfImprovementRunStatus, name="self_improvement_run_status"),
+        Enum(
+            SelfImprovementRunStatus,
+            name="self_improvement_run_status",
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
     trigger_mode: Mapped[SelfImprovementTriggerMode] = mapped_column(
-        Enum(SelfImprovementTriggerMode, name="self_improvement_trigger_mode"),
+        Enum(
+            SelfImprovementTriggerMode,
+            name="self_improvement_trigger_mode",
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False)

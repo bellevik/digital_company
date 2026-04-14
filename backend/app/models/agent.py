@@ -6,7 +6,7 @@ from sqlalchemy import Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.common import AgentRole, AgentStatus, TimestampMixin, uuid_primary_key
+from app.models.common import AgentRole, AgentStatus, TimestampMixin, enum_values, uuid_primary_key
 
 
 class Agent(TimestampMixin, Base):
@@ -14,9 +14,12 @@ class Agent(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = uuid_primary_key()
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    role: Mapped[AgentRole] = mapped_column(Enum(AgentRole, name="agent_role"), nullable=False)
+    role: Mapped[AgentRole] = mapped_column(
+        Enum(AgentRole, name="agent_role", values_callable=enum_values),
+        nullable=False,
+    )
     status: Mapped[AgentStatus] = mapped_column(
-        Enum(AgentStatus, name="agent_status"),
+        Enum(AgentStatus, name="agent_status", values_callable=enum_values),
         default=AgentStatus.IDLE,
         nullable=False,
     )

@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.common import TaskRunStatus, TimestampMixin, uuid_primary_key
+from app.models.common import TaskRunStatus, TimestampMixin, enum_values, uuid_primary_key
 
 
 class TaskRun(TimestampMixin, Base):
@@ -27,7 +27,7 @@ class TaskRun(TimestampMixin, Base):
         nullable=False,
     )
     status: Mapped[TaskRunStatus] = mapped_column(
-        Enum(TaskRunStatus, name="task_run_status"),
+        Enum(TaskRunStatus, name="task_run_status", values_callable=enum_values),
         nullable=False,
     )
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
