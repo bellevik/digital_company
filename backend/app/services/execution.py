@@ -29,14 +29,29 @@ class CodexCLIExecutionAdapter:
             self._settings.codex_cli_command,
             self._settings.codex_cli_subcommand,
             self._settings.codex_cli_full_auto_flag,
+            "-C",
+            str(self._settings.resolved_codex_workdir),
             prompt,
         ]
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                input="",
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return ExecutionResult(
+                stdout="",
+                stderr=(
+                    f"Execution backend is codex_cli, but '{self._settings.codex_cli_command}' "
+                    "is not installed in this runtime. Set CODEX_EXECUTION_BACKEND=mock for "
+                    "local Docker testing, or install/mount the Codex CLI into the backend container."
+                ),
+                exit_code=127,
+                command=command,
+            )
         return ExecutionResult(
             stdout=completed.stdout,
             stderr=completed.stderr,

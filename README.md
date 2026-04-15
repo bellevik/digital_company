@@ -154,14 +154,28 @@ The Phase 2 worker runtime executes a single agent cycle through:
 6. Marking the task `done` or `failed`
 7. Writing a `task_result` memory and optional follow-up tasks
 
-By default the worker uses the Codex CLI:
+The Docker Compose development stack installs the Linux Codex CLI in the backend image and mounts your host Codex auth/config directory into the container. This lets agent runs use the same ChatGPT-backed Codex login that you use on the Mac:
 
 - `CODEX_EXECUTION_BACKEND=codex_cli`
 - `CODEX_CLI_COMMAND=codex`
+- `CODEX_HOME=/Users/bellevik/.codex`
+- `CODEX_WORKDIR=/workspace`
 
-For local dry runs without Codex installed you can switch to:
+Before running agents, authenticate on the Mac host:
 
-- `CODEX_EXECUTION_BACKEND=mock`
+```bash
+codex login
+```
+
+Then rebuild/restart the stack so the backend image contains the Linux CLI:
+
+```bash
+./scripts/RESTART
+docker compose exec backend codex --version
+docker compose exec backend codex login status
+```
+
+For dry runs without a real Codex call, you can still set `CODEX_EXECUTION_BACKEND=mock` in `.env`.
 
 ## Memory Retrieval
 

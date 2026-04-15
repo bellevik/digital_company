@@ -29,12 +29,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-digital_company}
       SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
       SELF_IMPROVEMENT_INTERVAL_SECONDS: ${SELF_IMPROVEMENT_INTERVAL_SECONDS:-86400}
+      CODEX_EXECUTION_BACKEND: ${CODEX_EXECUTION_BACKEND:-codex_cli}
+      CODEX_WORKDIR: /workspace
       PROJECTS_ROOT: /projects
+      HOME: /codex-home
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
+      - .:/workspace
       - ./backend:/app
       - ./projects:/projects
+      - ${CODEX_HOME:-/Users/bellevik/.codex}:/codex-home/.codex
     depends_on:
       db:
         condition: service_healthy

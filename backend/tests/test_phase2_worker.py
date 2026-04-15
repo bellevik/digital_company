@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import execution_adapter_dependency
+from app.config import Settings
 from app.main import app
-from app.services.execution import ExecutionResult
+from app.services.execution import CodexCLIExecutionAdapter, ExecutionResult
 
 
 class FakeExecutionAdapter:
@@ -20,6 +21,17 @@ class FakeExecutionAdapter:
     def run(self, *, prompt: str) -> ExecutionResult:
         self.prompts.append(prompt)
         return self._result
+
+
+def test_codex_cli_adapter_reports_missing_binary() -> None:
+    adapter = CodexCLIExecutionAdapter(
+        settings=Settings(codex_cli_command="definitely-missing-codex-binary")
+    )
+
+    result = adapter.run(prompt="test prompt")
+
+    assert result.exit_code == 127
+    assert "CODEX_EXECUTION_BACKEND=mock" in result.stderr
 
 
 def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient, projects_root) -> None:

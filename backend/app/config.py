@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     codex_cli_command: str = "codex"
     codex_cli_subcommand: str = "exec"
     codex_cli_full_auto_flag: str = "--full-auto"
+    codex_workdir: Path | None = None
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -44,6 +45,11 @@ class Settings(BaseSettings):
     @property
     def resolved_projects_root(self) -> Path:
         return self.projects_root or (self.repo_root / "projects")
+
+    @computed_field
+    @property
+    def resolved_codex_workdir(self) -> Path:
+        return self.codex_workdir or self.repo_root
 
 
 @lru_cache
