@@ -227,6 +227,7 @@ export default function App() {
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
   const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [taskActionInFlight, setTaskActionInFlight] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -361,6 +362,11 @@ export default function App() {
     setMemories(payload[4]);
     setSystemSummary(payload[5]);
     setSelfImprovementRuns(payload[6]);
+    setSelectedTaskId((current) =>
+      current && payload[0].some((task) => task.id === current)
+        ? current
+        : payload[0][0]?.id ?? null,
+    );
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
@@ -432,6 +438,57 @@ export default function App() {
       );
     } finally {
       setIsRunningAgentId(null);
+    }
+  }
+
+  async function handleRetryTask() {
+    if (!selectedTask) {
+      return;
+    }
+
+    setTaskActionInFlight("retry");
+    try {
+      await apiPost<Task>(`/api/v1/tasks/${selectedTask.id}/retry`, {});
+      await refreshDashboard();
+      pushToast(setToast, "success", "Task returned to the queue.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to retry task.",
+      );
+    } finally {
+      setTaskActionInFlight(null);
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!selectedTask) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      `Delete "${selectedTask.title}"? This removes task runs, workflow records, and activity for this task. Project files are not deleted.`,
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    setTaskActionInFlight("delete");
+    try {
+      await apiDelete(`/api/v1/tasks/${selectedTask.id}`);
+      setSelectedTaskId(null);
+      setSelectedTaskEvents([]);
+      await refreshDashboard();
+      pushToast(setToast, "success", "Task deleted.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to delete task.",
+      );
+    } finally {
+      setTaskActionInFlight(null);
     }
   }
 
@@ -709,6 +766,28 @@ export default function App() {
                     </span>
                   </div>
                   <p className="detail-copy">{selectedTask.description}</p>
+                  <div className="task-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={
+                        taskActionInFlight !== null ||
+                        selectedTask.status === "todo" ||
+                        selectedTask.status === "in_progress"
+                      }
+                      onClick={() => void handleRetryTask()}
+                      type="button"
+                    >
+                      {taskActionInFlight === "retry" ? "Retrying..." : "Retry Task"}
+                    </button>
+                    <button
+                      className="danger-button"
+                      disabled={taskActionInFlight !== null}
+                      onClick={() => void handleDeleteTask()}
+                      type="button"
+                    >
+                      {taskActionInFlight === "delete" ? "Deleting..." : "Delete Task"}
+                    </button>
+                  </div>
                   <div className="detail-section">
                     <h4>Workflow</h4>
                     {selectedWorkflow ? (
@@ -1173,6 +1252,15 @@ async function apiPost<T>(path: string, payload: unknown): Promise<T> {
     throw new Error(await formatError(response));
   }
   return (await response.json()) as T;
+}
+
+async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(await formatError(response));
+  }
 }
 
 async function formatError(response: Response): Promise<string> {

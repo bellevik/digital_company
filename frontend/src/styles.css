@@ -349,6 +349,12 @@ pre {
   margin-top: 1rem;
 }
 
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
 .detail-block,
 .detail-section,
 .workflow-summary {
@@ -394,7 +400,8 @@ textarea {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   padding: 0.85rem 1rem;
   border-radius: 14px;
   font-weight: 700;
@@ -410,8 +417,14 @@ textarea {
   color: #102033;
 }
 
+.danger-button {
+  background: rgba(219, 79, 79, 0.14);
+  color: #9a2f2f;
+}
+
 .primary-button:disabled,
-.secondary-button:disabled {
+.secondary-button:disabled,
+.danger-button:disabled {
   opacity: 0.55;
   cursor: default;
 }

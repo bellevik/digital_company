@@ -76,6 +76,60 @@ def test_task_claim_is_atomic_for_second_agent(client: TestClient) -> None:
     assert second_claim.json()["detail"] == "task_not_available"
 
 
+def test_retry_failed_task_returns_it_to_queue(client: TestClient) -> None:
+    task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Retry me",
+            "description": "Failed work should be queueable again.",
+            "type": "feature",
+        },
+    ).json()
+    client.patch(f"/api/v1/tasks/{task['id']}", json={"status": "failed"})
+
+    retry_response = client.post(f"/api/v1/tasks/{task['id']}/retry")
+
+    assert retry_response.status_code == 200
+    payload = retry_response.json()
+    assert payload["status"] == "todo"
+    assert payload["completed_at"] is None
+    assert payload["assigned_agent_id"] is None
+
+    events = client.get(f"/api/v1/tasks/{task['id']}/events").json()
+    assert any(event["payload"].get("action") == "retry_requested" for event in events)
+
+
+def test_delete_task_removes_task_history_and_detaches_memory(client: TestClient) -> None:
+    task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Remove me",
+            "description": "Deleted work should leave no task records.",
+            "type": "research",
+        },
+    ).json()
+    memory = client.post(
+        "/api/v1/memory",
+        json={
+            "type": "decision",
+            "summary": "Keep memory",
+            "content": "Memory survives task deletion.",
+            "source_task_id": task["id"],
+        },
+    ).json()
+
+    delete_response = client.delete(f"/api/v1/tasks/{task['id']}")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"status": "deleted"}
+    assert all(item["id"] != task["id"] for item in client.get("/api/v1/tasks").json())
+    assert client.get(f"/api/v1/tasks/{task['id']}/events").json() == []
+
+    memories = client.get("/api/v1/memory").json()
+    detached_memory = next(item for item in memories if item["id"] == memory["id"])
+    assert detached_memory["source_task_id"] is None
+
+
 def test_memory_endpoint_returns_created_memory(client: TestClient) -> None:
     task = client.post(
         "/api/v1/tasks",

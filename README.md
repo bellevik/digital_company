@@ -122,6 +122,8 @@ Current Phase 1 API surface:
 - `GET /api/v1/tasks`
 - `POST /api/v1/tasks`
 - `PATCH /api/v1/tasks/{task_id}`
+- `POST /api/v1/tasks/{task_id}/retry`
+- `DELETE /api/v1/tasks/{task_id}`
 - `POST /api/v1/tasks/{task_id}/claim`
 - `GET /api/v1/tasks/{task_id}/events`
 - `GET /api/v1/agents`

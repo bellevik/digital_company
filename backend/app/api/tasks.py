@@ -10,8 +10,13 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import db_session_dependency
 from app.config import get_settings
 from app.models.common import AgentStatus, EventType, TaskStatus
+from app.models.agent import Agent
+from app.models.memory import Memory
+from app.models.review_decision import ReviewDecision
 from app.models.task import Task
 from app.models.task_event import TaskEvent
+from app.models.task_run import TaskRun
+from app.models.task_workflow import TaskWorkflow
 from app.repositories.task_repository import TaskClaimConflictError, claim_task
 from app.schemas.task import (
     TaskClaimRequest,
@@ -115,6 +120,80 @@ def update_task(
     db.commit()
     db.refresh(task)
     return task
+
+
+@router.post("/{task_id}/retry", response_model=TaskRead)
+def retry_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency)) -> Task:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    if task.status == TaskStatus.IN_PROGRESS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot retry a task that is currently in progress",
+        )
+
+    previous_agent = task.assigned_agent
+    previous_status = task.status
+    task.status = TaskStatus.TODO
+    task.completed_at = None
+    task.assigned_agent_id = None
+
+    if previous_agent is not None and previous_agent.current_task_id == task.id:
+        previous_agent.current_task_id = None
+        previous_agent.status = AgentStatus.IDLE
+
+    db.add(
+        TaskEvent(
+            task_id=task.id,
+            agent_id=previous_agent.id if previous_agent is not None else None,
+            event_type=EventType.TASK_UPDATED,
+            payload={
+                "action": "retry_requested",
+                "previous_status": previous_status.value,
+                "new_status": TaskStatus.TODO.value,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@router.delete("/{task_id}")
+def delete_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency)) -> dict[str, str]:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    agent_query = select(Agent).where(Agent.current_task_id == task.id)
+    if task.assigned_agent_id is not None:
+        agent_query = select(Agent).where(
+            (Agent.current_task_id == task.id) | (Agent.id == task.assigned_agent_id)
+        )
+    for agent in db.scalars(agent_query).all():
+        if agent.current_task_id == task.id:
+            agent.current_task_id = None
+        if agent.status == AgentStatus.BUSY:
+            agent.status = AgentStatus.IDLE
+
+    for memory in db.scalars(select(Memory).where(Memory.source_task_id == task.id)).all():
+        memory.source_task_id = None
+
+    for review_decision in db.scalars(
+        select(ReviewDecision).where(ReviewDecision.task_id == task.id)
+    ).all():
+        db.delete(review_decision)
+    for workflow in db.scalars(select(TaskWorkflow).where(TaskWorkflow.task_id == task.id)).all():
+        db.delete(workflow)
+    for task_run in db.scalars(select(TaskRun).where(TaskRun.task_id == task.id)).all():
+        db.delete(task_run)
+    for task_event in db.scalars(select(TaskEvent).where(TaskEvent.task_id == task.id)).all():
+        db.delete(task_event)
+
+    db.delete(task)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @router.post("/{task_id}/claim", response_model=TaskRead)
