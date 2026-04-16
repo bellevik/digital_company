@@ -33,6 +33,22 @@ class ProjectWorkspaceService:
             gitkeep.touch()
         return project_directory
 
+    def codex_project_directory(self, project_id: str | None) -> Path | None:
+        normalized_project_id = self.normalize_project_id(project_id)
+        if normalized_project_id is None:
+            return None
+        return self._settings.resolved_codex_workdir / "projects" / normalized_project_id
+
+    def list_workspace_artifacts(self, project_id: str | None) -> list[Path]:
+        project_directory = self.ensure_project_directory(project_id)
+        if project_directory is None:
+            return []
+        return sorted(
+            path.relative_to(project_directory)
+            for path in project_directory.rglob("*")
+            if path.is_file() and path.name != ".gitkeep"
+        )
+
     @staticmethod
     def normalize_project_id(project_id: str | None) -> str | None:
         if project_id is None:

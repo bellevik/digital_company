@@ -23,6 +23,10 @@ def test_seed_demo_populates_empty_system(client: TestClient, projects_root) -> 
 
 
 def test_manual_self_improvement_run_creates_follow_up_tasks(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "platform", "name": "Platform", "description": "Shared platform work."},
+    )
     client.post("/api/v1/tasks", json={
         "title": "Broken worker run",
         "description": "Something failed and needs attention.",

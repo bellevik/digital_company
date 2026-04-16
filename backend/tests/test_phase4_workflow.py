@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import execution_adapter_dependency
@@ -8,7 +10,7 @@ from app.services.execution import ExecutionResult
 
 
 class WorkflowExecutionAdapter:
-    def run(self, *, prompt: str) -> ExecutionResult:
+    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
         return ExecutionResult(
             stdout=(
                 '{"summary":"Completed implementation for review.",'
@@ -23,6 +25,10 @@ class WorkflowExecutionAdapter:
 
 
 def _create_completed_task(client: TestClient) -> tuple[dict, dict]:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "platform", "name": "Platform", "description": "Shared platform work."},
+    )
     app.dependency_overrides[execution_adapter_dependency] = lambda: WorkflowExecutionAdapter()
     agent = client.post("/api/v1/agents", json={"name": "workflow-dev", "role": "developer"}).json()
     task = client.post(

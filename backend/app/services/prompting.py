@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from app.models.agent import Agent
 from app.models.common import AgentRole, TaskType
@@ -67,9 +68,20 @@ def get_role_profile(role: AgentRole) -> RoleProfile:
     return ROLE_PROFILES[role]
 
 
-def build_prompt(*, agent: Agent, task: Task, memories: list[MemorySearchResult]) -> str:
+def build_prompt(
+    *,
+    agent: Agent,
+    task: Task,
+    memories: list[MemorySearchResult],
+    repo_root: Path,
+    project_workspace: Path | None,
+) -> str:
     role_profile = get_role_profile(agent.role)
     memory_block = _format_memories(memories)
+    workspace_block = _format_workspace_context(
+        repo_root=repo_root,
+        project_workspace=project_workspace,
+    )
 
     return f"""You are the {agent.role.value} agent named {agent.name}.
 
@@ -83,6 +95,9 @@ Project: {task.project_id or "unscoped"}
 Description:
 {task.description}
 
+Workspace:
+{workspace_block}
+
 Recent memory context:
 {memory_block}
 
@@ -91,6 +106,7 @@ Return JSON only with this shape:
   "summary": "short execution summary",
   "memory_summary": "short memory title",
   "memory_content": "durable implementation notes",
+  "artifact_paths": ["relative/path/inside/project/workspace"],
   "follow_up_tasks": [
     {{
       "title": "task title",
@@ -101,6 +117,9 @@ Return JSON only with this shape:
   ]
 }}
 
+For project-scoped tasks, create or update concrete files inside the project workspace before reporting success.
+If no concrete artifact is produced for a project-scoped task, return "final_status": "failed" and explain the blocker.
+List artifact_paths relative to the project workspace. Omit artifact_paths only when there is genuinely no filesystem artifact.
 Omit follow_up_tasks when none are needed. Do not include markdown fences.
 """
 
@@ -116,3 +135,17 @@ def _format_memories(memories: list[MemorySearchResult]) -> str:
             f"(score={memory.combined_score:.3f}): {memory.content}"
         )
     return "\n".join(lines)
+
+
+def _format_workspace_context(*, repo_root: Path, project_workspace: Path | None) -> str:
+    if project_workspace is None:
+        return (
+            f"Repository root: {repo_root}\n"
+            "This task is not scoped to a project workspace. Use the repository root when you need to create files."
+        )
+
+    return (
+        f"Repository root: {repo_root}\n"
+        f"Project workspace: {project_workspace}\n"
+        "Do the concrete work inside the project workspace unless the task explicitly requires touching shared repo files."
+    )

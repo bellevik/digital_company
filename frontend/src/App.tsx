@@ -25,6 +25,14 @@ type MemoryType = "conversation" | "decision" | "task_result" | "note";
 type TaskRunStatus = "running" | "succeeded" | "failed";
 type SearchStrategy = "keyword" | "vector" | "hybrid";
 
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type Task = {
   id: string;
   title: string;
@@ -187,6 +195,12 @@ const defaultTaskDraft = {
   projectId: "",
 };
 
+const defaultProjectDraft = {
+  id: "",
+  name: "",
+  description: "",
+};
+
 const defaultAgentDraft = {
   name: "",
   role: "developer" as AgentRole,
@@ -204,6 +218,7 @@ export default function App() {
   const [apiState, setApiState] = useState<ApiState>({ status: "loading" });
   const [toast, setToast] = useState<Toast | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
@@ -214,13 +229,16 @@ export default function App() {
     SelfImprovementRun[]
   >([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskEvents, setSelectedTaskEvents] = useState<TaskEvent[]>([]);
   const [taskDraft, setTaskDraft] = useState(defaultTaskDraft);
+  const [projectDraft, setProjectDraft] = useState(defaultProjectDraft);
   const [agentDraft, setAgentDraft] = useState(defaultAgentDraft);
   const [reviewDraft, setReviewDraft] = useState(defaultReviewDraft);
   const [memoryQuery, setMemoryQuery] = useState("task locking");
   const [memoryStrategy, setMemoryStrategy] = useState<SearchStrategy>("hybrid");
   const [memoryResults, setMemoryResults] = useState<MemorySearchResult[]>([]);
+  const [isSubmittingProject, setIsSubmittingProject] = useState(false);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
@@ -237,6 +255,7 @@ export default function App() {
       try {
         const [
           tasksResponse,
+          projectsResponse,
           agentsResponse,
           taskRunsResponse,
           workflowsResponse,
@@ -245,6 +264,7 @@ export default function App() {
           selfImprovementRunsResponse,
         ] = await Promise.all([
           apiGet<Task[]>("/api/v1/tasks"),
+          apiGet<Project[]>("/api/v1/projects"),
           apiGet<Agent[]>("/api/v1/agents"),
           apiGet<TaskRun[]>("/api/v1/task-runs"),
           apiGet<Workflow[]>("/api/v1/workflows"),
@@ -258,6 +278,7 @@ export default function App() {
         }
 
         setTasks(tasksResponse);
+        setProjects(projectsResponse);
         setAgents(agentsResponse);
         setTaskRuns(taskRunsResponse);
         setWorkflows(workflowsResponse);
@@ -265,6 +286,11 @@ export default function App() {
         setSystemSummary(summaryResponse);
         setSelfImprovementRuns(selfImprovementRunsResponse);
         setApiState({ status: "online", details: "operator backend reachable" });
+        setSelectedProjectId((current) =>
+          current && projectsResponse.some((project) => project.id === current)
+            ? current
+            : projectsResponse[0]?.id ?? null,
+        );
         setSelectedTaskId((current) =>
           current && tasksResponse.some((task) => task.id === current)
             ? current
@@ -336,6 +362,8 @@ export default function App() {
 
   const selectedTask =
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
+  const selectedProject =
+    projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
   const selectedWorkflow =
     workflows.find((workflow) => workflow.task_id === selectedTask?.id) ?? null;
   const selectedTaskRuns = selectedTask
@@ -348,6 +376,7 @@ export default function App() {
   async function refreshDashboard() {
     const payload = await Promise.all([
       apiGet<Task[]>("/api/v1/tasks"),
+      apiGet<Project[]>("/api/v1/projects"),
       apiGet<Agent[]>("/api/v1/agents"),
       apiGet<TaskRun[]>("/api/v1/task-runs"),
       apiGet<Workflow[]>("/api/v1/workflows"),
@@ -356,17 +385,48 @@ export default function App() {
       apiGet<SelfImprovementRun[]>("/api/v1/operations/self-improvement/runs"),
     ]);
     setTasks(payload[0]);
-    setAgents(payload[1]);
-    setTaskRuns(payload[2]);
-    setWorkflows(payload[3]);
-    setMemories(payload[4]);
-    setSystemSummary(payload[5]);
-    setSelfImprovementRuns(payload[6]);
+    setProjects(payload[1]);
+    setAgents(payload[2]);
+    setTaskRuns(payload[3]);
+    setWorkflows(payload[4]);
+    setMemories(payload[5]);
+    setSystemSummary(payload[6]);
+    setSelfImprovementRuns(payload[7]);
+    setSelectedProjectId((current) =>
+      current && payload[1].some((project) => project.id === current)
+        ? current
+        : payload[1][0]?.id ?? null,
+    );
     setSelectedTaskId((current) =>
       current && payload[0].some((task) => task.id === current)
         ? current
         : payload[0][0]?.id ?? null,
     );
+  }
+
+  async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmittingProject(true);
+    try {
+      const created = await apiPost<Project>("/api/v1/projects", {
+        id: projectDraft.id.trim(),
+        name: projectDraft.name.trim(),
+        description: projectDraft.description.trim() || null,
+      });
+      setProjectDraft(defaultProjectDraft);
+      setSelectedProjectId(created.id);
+      setTaskDraft((current) => ({ ...current, projectId: created.id }));
+      await refreshDashboard();
+      pushToast(setToast, "success", `Project ${created.name} created.`);
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to create project.",
+      );
+    } finally {
+      setIsSubmittingProject(false);
+    }
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
@@ -377,7 +437,7 @@ export default function App() {
         title: taskDraft.title,
         description: taskDraft.description,
         type: taskDraft.type,
-        project_id: taskDraft.projectId.trim() || null,
+        project_id: taskDraft.projectId,
       });
       setTaskDraft(defaultTaskDraft);
       await refreshDashboard();
@@ -713,7 +773,7 @@ export default function App() {
                                   {task.type}
                                 </span>
                                 <span className="task-project">
-                                  {task.project_id ?? "unscoped"}
+                                  {formatTaskProject(task.project_id, projects)}
                                 </span>
                               </div>
                               <h4>{task.title}</h4>
@@ -758,7 +818,7 @@ export default function App() {
                     <div>
                       <h3>{selectedTask.title}</h3>
                       <p className="muted">
-                        {selectedTask.type} • {selectedTask.project_id ?? "unscoped"}
+                        {selectedTask.type} • {formatTaskProject(selectedTask.project_id, projects)}
                       </p>
                     </div>
                     <span className={`status-pill status-${selectedTask.status}`}>
@@ -1008,6 +1068,90 @@ export default function App() {
             </div>
           </Panel>
 
+          <Panel
+            title="Projects"
+            subtitle="Create projects and then place tasks inside them"
+          >
+            <form className="form-stack" onSubmit={handleCreateProject}>
+              <label>
+                Project ID
+                <input
+                  required
+                  placeholder="futurecalc"
+                  value={projectDraft.id}
+                  onChange={(event) =>
+                    setProjectDraft((current) => ({
+                      ...current,
+                      id: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Project name
+                <input
+                  required
+                  placeholder="FutureCalc"
+                  value={projectDraft.name}
+                  onChange={(event) =>
+                    setProjectDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  rows={3}
+                  value={projectDraft.description}
+                  onChange={(event) =>
+                    setProjectDraft((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button className="primary-button" disabled={isSubmittingProject} type="submit">
+                {isSubmittingProject ? "Creating..." : "Create Project"}
+              </button>
+            </form>
+            <div className="entity-list">
+              {projects.map((project) => (
+                <article
+                  className={`entity-card ${
+                    selectedProject?.id === project.id ? "entity-card-active" : ""
+                  }`}
+                  key={project.id}
+                >
+                  <div className="entity-meta">
+                    <div>
+                      <h4>{project.name}</h4>
+                      <p>{project.id}</p>
+                    </div>
+                    <span className="score-pill">
+                      {tasks.filter((task) => task.project_id === project.id).length} task(s)
+                    </span>
+                  </div>
+                  <p>{project.description ?? "No project description yet."}</p>
+                  <p className="muted">workspace: projects/{project.id}</p>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setSelectedProjectId(project.id);
+                      setTaskDraft((current) => ({ ...current, projectId: project.id }));
+                    }}
+                    type="button"
+                  >
+                    Use For Task Creation
+                  </button>
+                </article>
+              ))}
+            </div>
+          </Panel>
+
           <Panel title="Agents" subtitle="Create agents and run cycles">
             <form className="form-stack" onSubmit={handleCreateAgent}>
               <label>
@@ -1084,7 +1228,10 @@ export default function App() {
             </div>
           </Panel>
 
-          <Panel title="Create Task" subtitle="Seed the queue from the UI">
+          <Panel
+            title="Create Task"
+            subtitle="Create tasks inside an existing project"
+          >
             <form className="form-stack" onSubmit={handleCreateTask}>
               <label>
                 Title
@@ -1118,8 +1265,9 @@ export default function App() {
                 </select>
               </label>
               <label>
-                Project ID
-                <input
+                Project
+                <select
+                  required
                   value={taskDraft.projectId}
                   onChange={(event) =>
                     setTaskDraft((current) => ({
@@ -1127,7 +1275,14 @@ export default function App() {
                       projectId: event.target.value,
                     }))
                   }
-                />
+                >
+                  <option value="">Select project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} ({project.id})
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Description
@@ -1143,9 +1298,16 @@ export default function App() {
                   }
                 />
               </label>
-              <button className="primary-button" disabled={isSubmittingTask} type="submit">
+              <button
+                className="primary-button"
+                disabled={isSubmittingTask || projects.length === 0}
+                type="submit"
+              >
                 Create Task
               </button>
+              {projects.length === 0 ? (
+                <p className="muted">Create a project first, then create tasks inside it.</p>
+              ) : null}
             </form>
           </Panel>
 
@@ -1284,6 +1446,14 @@ function formatDateTime(value: string) {
 
 function findAgentName(agentId: string, agents: Agent[]) {
   return agents.find((agent) => agent.id === agentId)?.name ?? agentId;
+}
+
+function formatTaskProject(projectId: string | null, projects: Project[]) {
+  if (!projectId) {
+    return "unscoped";
+  }
+  const project = projects.find((entry) => entry.id === projectId);
+  return project ? `${project.name}` : projectId;
 }
 
 function mapRunStatus(status: TaskRunStatus) {

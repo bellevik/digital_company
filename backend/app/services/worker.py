@@ -4,6 +4,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.schemas.worker import WorkerCycleResponse, WorkerExecutionPayload
 from app.services.execution import ExecutionAdapter, ExecutionResult
 from app.services.memory import MemoryService
 from app.services.project_workspace import ProjectWorkspaceService
+from app.services.projects import ProjectService
 from app.services.prompting import get_role_profile, build_prompt
 from app.services.workflow import WorkflowService
 
@@ -29,6 +31,7 @@ class ClaimedTaskContext:
     task: Task
     prompt: str
     run: TaskRun
+    workdir: Path | None
 
 
 class WorkerService:
@@ -46,7 +49,10 @@ class WorkerService:
         if claimed_context is None:
             return WorkerCycleResponse(agent_id=agent.id, outcome="idle")
 
-        execution_result = self._execute_prompt(prompt=claimed_context.prompt)
+        execution_result = self._execute_prompt(
+            prompt=claimed_context.prompt,
+            workdir=claimed_context.workdir,
+        )
         return self._finalize_run(
             agent_id=agent.id,
             task_id=claimed_context.task.id,
@@ -76,6 +82,8 @@ class WorkerService:
                     agent=agent,
                     task=task,
                     memories=self._retrieved_memories(task=task),
+                    repo_root=self._settings.resolved_codex_workdir,
+                    project_workspace=self._workspace_service().codex_project_directory(task.project_id),
                 )
                 run = TaskRun(
                     task_id=task.id,
@@ -96,7 +104,12 @@ class WorkerService:
                 self._db.commit()
                 self._db.refresh(task)
                 self._db.refresh(run)
-                return ClaimedTaskContext(task=task, prompt=prompt, run=run)
+                return ClaimedTaskContext(
+                    task=task,
+                    prompt=prompt,
+                    run=run,
+                    workdir=self._workspace_service().codex_project_directory(task.project_id),
+                )
             except TaskClaimConflictError:
                 self._db.rollback()
 
@@ -116,9 +129,12 @@ class WorkerService:
     def _workspace_service(self) -> ProjectWorkspaceService:
         return ProjectWorkspaceService(settings=self._settings)
 
-    def _execute_prompt(self, *, prompt: str) -> ExecutionResult:
+    def _project_service(self) -> ProjectService:
+        return ProjectService(db=self._db, settings=self._settings)
+
+    def _execute_prompt(self, *, prompt: str, workdir: Path | None) -> ExecutionResult:
         try:
-            return self._execution_adapter.run(prompt=prompt)
+            return self._execution_adapter.run(prompt=prompt, workdir=workdir)
         except Exception as exc:  # noqa: BLE001
             return ExecutionResult(
                 stdout="",
@@ -145,6 +161,21 @@ class WorkerService:
         final_status = TaskRunStatus.SUCCEEDED if execution_result.exit_code == 0 else TaskRunStatus.FAILED
         if payload is not None and payload.final_status is not None:
             final_status = payload.final_status
+        artifact_paths: list[str] = []
+        if payload is not None:
+            artifact_paths = self._validated_artifact_paths(task=task, payload=payload)
+            if task.project_id and final_status == TaskRunStatus.SUCCEEDED and not artifact_paths:
+                final_status = TaskRunStatus.FAILED
+                artifact_error = (
+                    f"Project task completed without creating files in projects/{task.project_id}. "
+                    "Return concrete artifact_paths and ensure those files exist before reporting success."
+                )
+                execution_result = ExecutionResult(
+                    stdout=execution_result.stdout,
+                    stderr="\n".join(part for part in [execution_result.stderr, artifact_error] if part),
+                    exit_code=execution_result.exit_code if execution_result.exit_code != 0 else 1,
+                    command=execution_result.command,
+                )
 
         task.status = TaskStatus.DONE if final_status == TaskRunStatus.SUCCEEDED else TaskStatus.FAILED
         task.completed_at = datetime.now(timezone.utc)
@@ -180,7 +211,7 @@ class WorkerService:
                 )
 
             for follow_up in payload.follow_up_tasks:
-                project_id = self._workspace_service().normalize_project_id(
+                project_id = self._project_service().require_project(
                     follow_up.project_id or task.project_id
                 )
                 self._workspace_service().ensure_project_directory(project_id)
@@ -216,6 +247,7 @@ class WorkerService:
                     "action": "execution_finished",
                     "task_status": task.status.value,
                     "run_status": run.status.value,
+                    "artifact_paths": artifact_paths,
                     "follow_up_tasks": [str(task_id) for task_id in follow_up_task_ids],
                 },
             )
@@ -232,6 +264,36 @@ class WorkerService:
             memory_id=memory_id,
             follow_up_task_ids=follow_up_task_ids,
         )
+
+    def _validated_artifact_paths(
+        self,
+        *,
+        task: Task,
+        payload: WorkerExecutionPayload,
+    ) -> list[str]:
+        if task.project_id is None:
+            return payload.artifact_paths
+
+        project_directory = self._workspace_service().ensure_project_directory(task.project_id)
+        if project_directory is None:
+            return []
+
+        root = project_directory.resolve()
+        validated_paths: list[str] = []
+        for relative_path in payload.artifact_paths:
+            normalized = relative_path.strip().lstrip("/")
+            if not normalized:
+                continue
+            candidate = (project_directory / normalized).resolve()
+            if root not in candidate.parents and candidate != root:
+                continue
+            if candidate.is_file():
+                validated_paths.append(normalized)
+
+        if validated_paths:
+            return validated_paths
+
+        return [str(path) for path in self._workspace_service().list_workspace_artifacts(task.project_id)]
 
 
 def _parse_worker_payload(raw_output: str) -> WorkerExecutionPayload | None:

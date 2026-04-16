@@ -99,7 +99,7 @@ Expected local services:
 - API docs: `http://localhost:8000/docs`
 - Postgres: `localhost:5432`
 
-Task creation now ensures the repo-local `projects/` workspace exists. When a task uses a new `project_id`, the backend creates `projects/<project_id>/` with a `.gitkeep` so the directory can be committed before real files land there.
+Projects are now first-class records. Create a project first, then create tasks inside it. Each project maps to a repo-local workspace directory at `projects/<project_id>/`, which is created automatically when the project is created.
 
 ## Backend Commands
 
@@ -119,6 +119,8 @@ Current Phase 1 API surface:
 
 - `GET /api/v1/health`
 - `GET /api/v1/meta`
+- `GET /api/v1/projects`
+- `POST /api/v1/projects`
 - `GET /api/v1/tasks`
 - `POST /api/v1/tasks`
 - `PATCH /api/v1/tasks/{task_id}`
@@ -206,6 +208,7 @@ If a reviewer requests changes, the task is reopened to `todo` so it can re-ente
 
 The frontend at `http://localhost:5173` now provides the main operator surface:
 
+- Create and manage projects
 - Create tasks and agents
 - Run agents against the queue
 - Inspect task runs and activity

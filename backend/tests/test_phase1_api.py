@@ -10,7 +10,32 @@ def test_health_endpoint(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_create_and_list_projects(client: TestClient, projects_root) -> None:
+    create_response = client.post(
+        "/api/v1/projects",
+        json={
+            "id": "platform",
+            "name": "Platform",
+            "description": "Shared platform work.",
+        },
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["id"] == "platform"
+    assert created["name"] == "Platform"
+    assert (projects_root / "platform").is_dir()
+
+    list_response = client.get("/api/v1/projects")
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+
+
 def test_create_and_list_tasks(client: TestClient, projects_root) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "platform", "name": "Platform", "description": "Shared platform work."},
+    )
     create_response = client.post(
         "/api/v1/tasks",
         json={
@@ -45,6 +70,21 @@ def test_create_task_rejects_unsafe_project_id(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert "project_id must use only letters, numbers, dots, underscores, or hyphens" in response.json()["detail"]
+
+
+def test_create_task_requires_existing_project(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Unknown project",
+            "description": "Tasks must target an existing project.",
+            "type": "feature",
+            "project_id": "missing-project",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "project_not_found"
 
 
 def test_task_claim_is_atomic_for_second_agent(client: TestClient) -> None:

@@ -25,6 +25,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
+from app.services.projects import ProjectService
 from app.schemas.workflow import ReviewDecisionCreate, SubmitForReviewRequest, TaskWorkflowRead
 from app.services.project_workspace import ProjectWorkspaceService
 from app.services.workflow import WorkflowService
@@ -45,11 +46,13 @@ def list_tasks(
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate, db: Session = Depends(db_session_dependency)) -> Task:
-    workspace_service = ProjectWorkspaceService(settings=get_settings())
+    settings = get_settings()
+    workspace_service = ProjectWorkspaceService(settings=settings)
+    project_service = ProjectService(db=db, settings=settings)
     try:
-        project_id = workspace_service.normalize_project_id(payload.project_id)
+        project_id = project_service.require_project(payload.project_id)
         workspace_service.ensure_project_directory(project_id)
-    except ValueError as exc:
+    except (LookupError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     task = Task(
@@ -82,14 +85,16 @@ def update_task(
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    workspace_service = ProjectWorkspaceService(settings=get_settings())
+    settings = get_settings()
+    workspace_service = ProjectWorkspaceService(settings=settings)
+    project_service = ProjectService(db=db, settings=settings)
     previous_agent = task.assigned_agent
     update_data = payload.model_dump(exclude_unset=True)
     if "project_id" in update_data:
         try:
-            update_data["project_id"] = workspace_service.normalize_project_id(update_data["project_id"])
+            update_data["project_id"] = project_service.require_project(update_data["project_id"])
             workspace_service.ensure_project_directory(update_data["project_id"])
-        except ValueError as exc:
+        except (LookupError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),

@@ -24,6 +24,7 @@ from app.models.task_workflow import TaskWorkflow
 from app.schemas.self_improvement import SeedDemoResponse, SystemSummary
 from app.services.memory import MemoryService
 from app.services.project_workspace import ProjectWorkspaceService
+from app.services.projects import ProjectService
 
 
 class SelfImprovementService:
@@ -60,6 +61,9 @@ class SelfImprovementService:
     def _workspace_service(self) -> ProjectWorkspaceService:
         return ProjectWorkspaceService(settings=self._settings)
 
+    def _project_service(self) -> ProjectService:
+        return ProjectService(db=self._db, settings=self._settings)
+
     def list_runs(self) -> list[SelfImprovementRun]:
         return list(
             self._db.scalars(
@@ -92,13 +96,15 @@ class SelfImprovementService:
             )
             if existing_open is not None:
                 continue
+            project = self._project_service().get_or_create_project(
+                project_id=suggestion["project_id"],
+            )
             task = Task(
                 title=suggestion["title"],
                 description=suggestion["description"],
                 type=suggestion["type"],
-                project_id=self._workspace_service().normalize_project_id(suggestion["project_id"]),
+                project_id=project.id,
             )
-            self._workspace_service().ensure_project_directory(task.project_id)
             self._db.add(task)
             self._db.flush()
             created_task_ids.append(str(task.id))
@@ -159,14 +165,13 @@ class SelfImprovementService:
                 ),
             ]
             for title, description, task_type, project_id in demo_tasks:
-                normalized_project_id = workspace_service.normalize_project_id(project_id)
-                workspace_service.ensure_project_directory(normalized_project_id)
+                project = self._project_service().get_or_create_project(project_id=project_id)
                 self._db.add(
                     Task(
                         title=title,
                         description=description,
                         type=task_type,
-                        project_id=normalized_project_id,
+                        project_id=project.id,
                     )
                 )
                 created_tasks += 1

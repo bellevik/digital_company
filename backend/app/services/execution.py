@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from app.config import Settings
@@ -16,7 +17,7 @@ class ExecutionResult:
 
 
 class ExecutionAdapter(Protocol):
-    def run(self, *, prompt: str) -> ExecutionResult:
+    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
         ...
 
 
@@ -24,15 +25,18 @@ class CodexCLIExecutionAdapter:
     def __init__(self, settings: Settings):
         self._settings = settings
 
-    def run(self, *, prompt: str) -> ExecutionResult:
+    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+        command_workdir = workdir or self._settings.resolved_codex_workdir
         command = [
             self._settings.codex_cli_command,
             self._settings.codex_cli_subcommand,
             self._settings.codex_cli_full_auto_flag,
             "-C",
-            str(self._settings.resolved_codex_workdir),
-            prompt,
+            str(command_workdir),
         ]
+        if command_workdir != self._settings.resolved_codex_workdir:
+            command.extend(["--add-dir", str(self._settings.resolved_codex_workdir)])
+        command.append(prompt)
         try:
             completed = subprocess.run(
                 command,
@@ -61,14 +65,15 @@ class CodexCLIExecutionAdapter:
 
 
 class MockExecutionAdapter:
-    def run(self, *, prompt: str) -> ExecutionResult:
+    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
         return ExecutionResult(
             stdout=(
                 '{"summary":"Mock execution completed.","memory_summary":"Mock run",'
                 '"memory_content":"Mock backend configured without Codex CLI.",'
+                '"artifact_paths":["mock-output.txt"],'
                 '"follow_up_tasks":[]}'
             ),
             stderr="",
             exit_code=0,
-            command=["mock-executor", prompt],
+            command=["mock-executor", str(workdir) if workdir is not None else "", prompt],
         )

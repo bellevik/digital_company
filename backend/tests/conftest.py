@@ -17,6 +17,7 @@ from app.models import (
     agent,
     embedding,
     memory,
+    project,
     review_decision,
     self_improvement_run,
     task,
@@ -48,6 +49,7 @@ def session() -> Generator[Session, None, None]:
 def projects_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "projects"
     monkeypatch.setenv("PROJECTS_ROOT", str(root))
+    monkeypatch.setenv("CODEX_WORKDIR", str(tmp_path))
     get_settings.cache_clear()
     yield root
     get_settings.cache_clear()

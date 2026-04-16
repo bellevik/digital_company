@@ -20,6 +20,7 @@ class WorkerExecutionPayload(BaseModel):
     memory_summary: str | None = None
     memory_content: str | None = None
     final_status: TaskRunStatus | None = None
+    artifact_paths: list[str] = Field(default_factory=list)
     follow_up_tasks: list[WorkerFollowUpTask] = Field(default_factory=list)
 
 

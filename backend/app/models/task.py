@@ -33,7 +33,11 @@ class Task(TimestampMixin, Base):
         ForeignKey("agents.id", ondelete="SET NULL"),
         nullable=True,
     )
-    project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(
+        String(100),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     assigned_agent: Mapped["Agent | None"] = relationship(
@@ -41,6 +45,7 @@ class Task(TimestampMixin, Base):
         back_populates="assigned_tasks",
         foreign_keys=[assigned_agent_id],
     )
+    project: Mapped["Project | None"] = relationship("Project", back_populates="tasks")
     memories: Mapped[list["Memory"]] = relationship("Memory", back_populates="source_task")
     events: Mapped[list["TaskEvent"]] = relationship("TaskEvent", back_populates="task")
     task_runs: Mapped[list["TaskRun"]] = relationship("TaskRun", back_populates="task")
