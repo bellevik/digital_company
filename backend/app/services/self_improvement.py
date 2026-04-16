@@ -10,6 +10,7 @@ from app.config import Settings
 from app.models.agent import Agent
 from app.models.common import (
     ApprovalStatus,
+    AgentRole,
     MemoryType,
     SelfImprovementRunStatus,
     SelfImprovementTriggerMode,
@@ -23,6 +24,7 @@ from app.models.task_run import TaskRun
 from app.models.task_workflow import TaskWorkflow
 from app.schemas.self_improvement import SeedDemoResponse, SystemSummary
 from app.services.memory import MemoryService
+from app.services.agent_catalog import default_template_id_for_role
 from app.services.project_workspace import ProjectWorkspaceService
 from app.services.projects import ProjectService
 
@@ -134,12 +136,19 @@ class SelfImprovementService:
 
         if self._count(Agent) == 0:
             for name, role in [
-                ("arch-1", "architect"),
-                ("dev-1", "developer"),
-                ("tester-1", "tester"),
-                ("reviewer-1", "reviewer"),
+                ("arch-1", AgentRole.ARCHITECT),
+                ("dev-1", AgentRole.DEVELOPER),
+                ("tester-1", AgentRole.TESTER),
+                ("reviewer-1", AgentRole.REVIEWER),
             ]:
-                self._db.add(Agent(name=name, role=role))
+                self._db.add(
+                    Agent(
+                        name=name,
+                        role=role,
+                        template_id=default_template_id_for_role(role),
+                        skill_ids=[],
+                    )
+                )
                 created_agents += 1
             self._db.flush()
 

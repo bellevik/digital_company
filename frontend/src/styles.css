@@ -226,6 +226,80 @@ pre {
   gap: 0.8rem;
 }
 
+.project-list {
+  margin-top: 0.8rem;
+}
+
+.template-picker,
+.skill-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.template-card,
+.skill-card {
+  width: 100%;
+  padding: 0.95rem;
+  border-radius: 18px;
+  background: rgba(245, 248, 252, 0.9);
+  border: 1px solid rgba(16, 32, 51, 0.1);
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.template-card {
+  cursor: pointer;
+}
+
+.template-card-active,
+.skill-card-active {
+  outline: 2px solid rgba(30, 112, 204, 0.28);
+  background: rgba(233, 243, 255, 0.88);
+}
+
+.template-preview {
+  font-size: 0.9rem;
+}
+
+.markdown-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  background: rgba(16, 32, 51, 0.05);
+  padding: 0.8rem;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.skill-section,
+.section-heading {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.section-heading h3,
+.section-heading p {
+  margin: 0;
+}
+
+.skill-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.skill-card input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.25rem;
+}
+
+.skill-card-copy {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .task-card,
 .entity-card,
 .activity-item,
@@ -236,6 +310,10 @@ pre {
   background: rgba(247, 249, 252, 0.95);
   border: 1px solid rgba(16, 32, 51, 0.08);
   text-align: left;
+}
+
+.task-card {
+  cursor: pointer;
 }
 
 .task-card-active {
@@ -260,13 +338,41 @@ pre {
   align-items: center;
 }
 
+.task-card-topline-left {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.task-card-delete {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: rgba(219, 79, 79, 0.12);
+  color: #9a2f2f;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.task-card-delete:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .task-card h4,
-.entity-card h4 {
+.entity-card h4,
+.template-card h4,
+.skill-card h4 {
   margin: 0.7rem 0 0.45rem;
 }
 
 .task-card p,
 .entity-card p,
+.template-card p,
+.skill-card p,
 .run-summary {
   margin: 0;
   line-height: 1.6;

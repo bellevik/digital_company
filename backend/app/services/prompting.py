@@ -7,6 +7,7 @@ from app.models.agent import Agent
 from app.models.common import AgentRole, TaskType
 from app.schemas.memory_search import MemorySearchResult
 from app.models.task import Task
+from app.services.agent_catalog import resolve_agent_skills, resolve_agent_template
 
 
 @dataclass(frozen=True)
@@ -77,16 +78,33 @@ def build_prompt(
     project_workspace: Path | None,
 ) -> str:
     role_profile = get_role_profile(agent.role)
+    template = resolve_agent_template(role=agent.role, template_id=agent.template_id)
+    active_skills = resolve_agent_skills(agent.skill_ids or [], repo_root=repo_root)
     memory_block = _format_memories(memories)
     workspace_block = _format_workspace_context(
         repo_root=repo_root,
         project_workspace=project_workspace,
+    )
+    custom_instruction_block = (
+        agent.instructions.strip() if agent.instructions is not None and agent.instructions.strip() else "None."
     )
 
     return f"""You are the {agent.role.value} agent named {agent.name}.
 
 Role instruction:
 {role_profile.prompt_instruction}
+
+Template:
+{template.name}
+
+Template instruction:
+{template.instructions}
+
+Active skills:
+{_format_skills(active_skills)}
+
+Custom instructions:
+{custom_instruction_block}
 
 Task:
 Title: {task.title}
@@ -148,4 +166,19 @@ def _format_workspace_context(*, repo_root: Path, project_workspace: Path | None
         f"Repository root: {repo_root}\n"
         f"Project workspace: {project_workspace}\n"
         "Do the concrete work inside the project workspace unless the task explicitly requires touching shared repo files."
+    )
+
+
+def _format_skills(skills) -> str:
+    if not skills:
+        return "No additional skills selected."
+
+    return "\n\n".join(
+        (
+            f"Skill: {skill.name}\n"
+            f"Path: {skill.path}\n"
+            f"Summary: {skill.summary}\n"
+            f"Instructions:\n{skill.instructions}"
+        )
+        for skill in skills
     )

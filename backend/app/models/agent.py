@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import JSON, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,6 +18,9 @@ class Agent(TimestampMixin, Base):
         Enum(AgentRole, name="agent_role", values_callable=enum_values),
         nullable=False,
     )
+    template_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    skill_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     status: Mapped[AgentStatus] = mapped_column(
         Enum(AgentStatus, name="agent_status", values_callable=enum_values),
         default=AgentStatus.IDLE,

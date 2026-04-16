@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import execution_adapter_dependency
 from app.config import Settings
 from app.main import app
+from app.models.common import AgentRole
 from app.services.execution import CodexCLIExecutionAdapter, ExecutionResult
+from app.services.agent_catalog import default_template_id_for_role
 
 
 class FakeExecutionAdapter:
@@ -108,6 +110,71 @@ def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient
     assert adapter.workdirs[0].endswith("/projects/platform")
     assert (projects_root / "platform").is_dir()
     assert (projects_root / "platform" / "deliverables" / "implementation.md").is_file()
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_agent_catalog_and_create_agent_with_template_and_skills(client: TestClient) -> None:
+    catalog_response = client.get("/api/v1/agents/catalog")
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert any(template["role"] == "developer" for template in catalog["templates"])
+    testing_skill = next(skill for skill in catalog["skills"] if skill["id"] == "testing_strategy")
+    assert testing_skill["path"].endswith("/agent_skills/testing_strategy/SKILL.md")
+    assert "## Working Style" in testing_skill["instructions"]
+
+    create_response = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "builder-pro",
+            "role": "developer",
+            "template_id": "developer_refactor_specialist",
+            "instructions": "Prefer clean seams and leave migration notes.",
+            "skill_ids": ["database_modeling", "testing_strategy"],
+        },
+    )
+
+    assert create_response.status_code == 201
+    agent = create_response.json()
+    assert agent["template_id"] == "developer_refactor_specialist"
+    assert agent["instructions"] == "Prefer clean seams and leave migration notes."
+    assert agent["skill_ids"] == ["database_modeling", "testing_strategy"]
+
+
+def test_run_agent_once_prompt_includes_template_skills_and_custom_instructions(client: TestClient) -> None:
+    adapter = FakeExecutionAdapter(
+        stdout='{"summary":"done","memory_summary":"done","memory_content":"done","follow_up_tasks":[]}'
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    agent = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "dev-instructions",
+            "role": "developer",
+            "template_id": "developer_senior_builder",
+            "instructions": "Optimize for maintainability over speed.",
+            "skill_ids": ["testing_strategy", "documentation_handoff"],
+        },
+    ).json()
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Implement structured retries",
+            "description": "Add explicit retry handling for failed agent work.",
+            "type": "feature",
+        },
+    )
+
+    response = client.post(f"/api/v1/agents/{agent['id']}/work")
+
+    assert response.status_code == 200
+    assert adapter.prompts
+    prompt = adapter.prompts[0]
+    assert "Senior Builder" in prompt
+    assert "Optimize for maintainability over speed." in prompt
+    assert "Path: " in prompt
+    assert "Start from the riskiest behavior and verify that first." in prompt
+    assert "Documentation Handoff" in prompt
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 
@@ -242,5 +309,33 @@ def test_memory_search_and_worker_prompt_use_retrieved_context(client: TestClien
     assert "Use Postgres task locking" in adapter.prompts[0]
     assert "score=" in adapter.prompts[0]
     assert "Repository root:" in adapter.prompts[0]
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_delete_agent_succeeds_only_without_history(client: TestClient) -> None:
+    removable = client.post("/api/v1/agents", json={"name": "temp-agent", "role": "designer"}).json()
+    assert removable["template_id"] == default_template_id_for_role(AgentRole.DESIGNER)
+
+    delete_response = client.delete(f"/api/v1/agents/{removable['id']}")
+    assert delete_response.status_code == 204
+
+    historical = client.post("/api/v1/agents", json={"name": "historical-agent", "role": "developer"}).json()
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Build initial flow",
+            "description": "Create real project output.",
+            "type": "feature",
+        },
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: FakeExecutionAdapter(
+        stdout='{"summary":"done","memory_summary":"done","memory_content":"done","follow_up_tasks":[]}'
+    )
+    client.post(f"/api/v1/agents/{historical['id']}/work")
+
+    blocked_delete = client.delete(f"/api/v1/agents/{historical['id']}")
+    assert blocked_delete.status_code == 409
+    assert "execution history" in blocked_delete.json()["detail"]
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)

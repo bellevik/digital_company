@@ -50,10 +50,37 @@ type Agent = {
   id: string;
   name: string;
   role: AgentRole;
+  template_id: string | null;
+  instructions: string | null;
+  skill_ids: string[];
   status: AgentStatus;
   current_task_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type AgentTemplate = {
+  id: string;
+  role: AgentRole;
+  name: string;
+  summary: string;
+  instructions: string;
+  is_default: boolean;
+};
+
+type AgentSkill = {
+  id: string;
+  name: string;
+  summary: string;
+  instructions: string;
+  path: string;
+  source: string;
+  recommended_roles: AgentRole[];
+};
+
+type AgentCatalog = {
+  templates: AgentTemplate[];
+  skills: AgentSkill[];
 };
 
 type Memory = {
@@ -204,6 +231,9 @@ const defaultProjectDraft = {
 const defaultAgentDraft = {
   name: "",
   role: "developer" as AgentRole,
+  templateId: "",
+  instructions: "",
+  skillIds: [] as string[],
 };
 
 const defaultReviewDraft = {
@@ -221,6 +251,10 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentCatalog, setAgentCatalog] = useState<AgentCatalog>({
+    templates: [],
+    skills: [],
+  });
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -242,6 +276,7 @@ export default function App() {
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
+  const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
   const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
@@ -254,6 +289,7 @@ export default function App() {
       setIsRefreshing(true);
       try {
         const [
+          catalogResponse,
           tasksResponse,
           projectsResponse,
           agentsResponse,
@@ -263,6 +299,7 @@ export default function App() {
           summaryResponse,
           selfImprovementRunsResponse,
         ] = await Promise.all([
+          apiGet<AgentCatalog>("/api/v1/agents/catalog"),
           apiGet<Task[]>("/api/v1/tasks"),
           apiGet<Project[]>("/api/v1/projects"),
           apiGet<Agent[]>("/api/v1/agents"),
@@ -277,6 +314,7 @@ export default function App() {
           return;
         }
 
+        setAgentCatalog(catalogResponse);
         setTasks(tasksResponse);
         setProjects(projectsResponse);
         setAgents(agentsResponse);
@@ -364,6 +402,15 @@ export default function App() {
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const roleTemplates = agentCatalog.templates.filter(
+    (template) => template.role === agentDraft.role,
+  );
+  const selectedAgentTemplate =
+    roleTemplates.find((template) => template.id === agentDraft.templateId) ??
+    roleTemplates.find((template) => template.is_default) ??
+    roleTemplates[0] ??
+    null;
+  const sortedSkills = sortSkillsForRole(agentCatalog.skills, agentDraft.role);
   const selectedWorkflow =
     workflows.find((workflow) => workflow.task_id === selectedTask?.id) ?? null;
   const selectedTaskRuns = selectedTask
@@ -375,6 +422,7 @@ export default function App() {
 
   async function refreshDashboard() {
     const payload = await Promise.all([
+      apiGet<AgentCatalog>("/api/v1/agents/catalog"),
       apiGet<Task[]>("/api/v1/tasks"),
       apiGet<Project[]>("/api/v1/projects"),
       apiGet<Agent[]>("/api/v1/agents"),
@@ -384,25 +432,42 @@ export default function App() {
       apiGet<SystemSummary>("/api/v1/operations/summary"),
       apiGet<SelfImprovementRun[]>("/api/v1/operations/self-improvement/runs"),
     ]);
-    setTasks(payload[0]);
-    setProjects(payload[1]);
-    setAgents(payload[2]);
-    setTaskRuns(payload[3]);
-    setWorkflows(payload[4]);
-    setMemories(payload[5]);
-    setSystemSummary(payload[6]);
-    setSelfImprovementRuns(payload[7]);
+    setAgentCatalog(payload[0]);
+    setTasks(payload[1]);
+    setProjects(payload[2]);
+    setAgents(payload[3]);
+    setTaskRuns(payload[4]);
+    setWorkflows(payload[5]);
+    setMemories(payload[6]);
+    setSystemSummary(payload[7]);
+    setSelfImprovementRuns(payload[8]);
     setSelectedProjectId((current) =>
-      current && payload[1].some((project) => project.id === current)
+      current && payload[2].some((project) => project.id === current)
+        ? current
+        : payload[2][0]?.id ?? null,
+    );
+    setSelectedTaskId((current) =>
+      current && payload[1].some((task) => task.id === current)
         ? current
         : payload[1][0]?.id ?? null,
     );
-    setSelectedTaskId((current) =>
-      current && payload[0].some((task) => task.id === current)
-        ? current
-        : payload[0][0]?.id ?? null,
-    );
   }
+
+  useEffect(() => {
+    const matchingTemplates = agentCatalog.templates.filter(
+      (template) => template.role === agentDraft.role,
+    );
+    if (matchingTemplates.length === 0) {
+      return;
+    }
+    if (matchingTemplates.some((template) => template.id === agentDraft.templateId)) {
+      return;
+    }
+    const nextTemplateId =
+      matchingTemplates.find((template) => template.is_default)?.id ??
+      matchingTemplates[0].id;
+    setAgentDraft((current) => ({ ...current, templateId: nextTemplateId }));
+  }, [agentCatalog.templates, agentDraft.role, agentDraft.templateId]);
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -458,8 +523,11 @@ export default function App() {
     setIsSubmittingAgent(true);
     try {
       await apiPost<Agent>("/api/v1/agents", {
-        name: agentDraft.name,
+        name: agentDraft.name.trim(),
         role: agentDraft.role,
+        template_id: selectedAgentTemplate?.id ?? null,
+        instructions: agentDraft.instructions.trim() || null,
+        skill_ids: agentDraft.skillIds,
       });
       setAgentDraft(defaultAgentDraft);
       await refreshDashboard();
@@ -472,6 +540,30 @@ export default function App() {
       );
     } finally {
       setIsSubmittingAgent(false);
+    }
+  }
+
+  async function handleDeleteAgent(agent: Agent) {
+    const shouldDelete = window.confirm(
+      `Delete agent "${agent.name}"? Agents with execution history cannot be deleted.`,
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    setIsDeletingAgentId(agent.id);
+    try {
+      await apiDelete(`/api/v1/agents/${agent.id}`);
+      await refreshDashboard();
+      pushToast(setToast, "success", "Agent deleted.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to delete agent.",
+      );
+    } finally {
+      setIsDeletingAgentId(null);
     }
   }
 
@@ -522,23 +614,26 @@ export default function App() {
     }
   }
 
-  async function handleDeleteTask() {
-    if (!selectedTask) {
+  async function handleDeleteTask(taskOverride?: Task) {
+    const taskToDelete = taskOverride ?? selectedTask;
+    if (!taskToDelete) {
       return;
     }
 
     const shouldDelete = window.confirm(
-      `Delete "${selectedTask.title}"? This removes task runs, workflow records, and activity for this task. Project files are not deleted.`,
+      `Delete "${taskToDelete.title}"? This removes task runs, workflow records, and activity for this task. Project files are not deleted.`,
     );
     if (!shouldDelete) {
       return;
     }
 
-    setTaskActionInFlight("delete");
+    setTaskActionInFlight(`delete:${taskToDelete.id}`);
     try {
-      await apiDelete(`/api/v1/tasks/${selectedTask.id}`);
-      setSelectedTaskId(null);
-      setSelectedTaskEvents([]);
+      await apiDelete(`/api/v1/tasks/${taskToDelete.id}`);
+      if (selectedTask?.id === taskToDelete.id) {
+        setSelectedTaskId(null);
+        setSelectedTaskEvents([]);
+      }
       await refreshDashboard();
       pushToast(setToast, "success", "Task deleted.");
     } catch (error) {
@@ -760,21 +855,42 @@ export default function App() {
                             (entry) => entry.task_id === task.id,
                           );
                           return (
-                            <button
+                            <article
                               className={`task-card ${
                                 selectedTask?.id === task.id ? "task-card-active" : ""
                               }`}
                               key={task.id}
                               onClick={() => setSelectedTaskId(task.id)}
-                              type="button"
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelectedTaskId(task.id);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
                             >
                               <div className="task-card-topline">
-                                <span className={`tag tag-${task.type}`}>
-                                  {task.type}
-                                </span>
-                                <span className="task-project">
-                                  {formatTaskProject(task.project_id, projects)}
-                                </span>
+                                <div className="task-card-topline-left">
+                                  <span className={`tag tag-${task.type}`}>
+                                    {task.type}
+                                  </span>
+                                  <span className="task-project">
+                                    {formatTaskProject(task.project_id, projects)}
+                                  </span>
+                                </div>
+                                <button
+                                  aria-label={`Delete ${task.title}`}
+                                  className="task-card-delete"
+                                  disabled={taskActionInFlight !== null}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleDeleteTask(task);
+                                  }}
+                                  type="button"
+                                >
+                                  ×
+                                </button>
                               </div>
                               <h4>{task.title}</h4>
                               <p>{task.description}</p>
@@ -788,7 +904,7 @@ export default function App() {
                                   {workflow?.approval_status ?? "not_required"}
                                 </span>
                               </div>
-                            </button>
+                            </article>
                           );
                         })}
                     </div>
@@ -845,7 +961,7 @@ export default function App() {
                       onClick={() => void handleDeleteTask()}
                       type="button"
                     >
-                      {taskActionInFlight === "delete" ? "Deleting..." : "Delete Task"}
+                      {taskActionInFlight === `delete:${selectedTask.id}` ? "Deleting..." : "Delete Task"}
                     </button>
                   </div>
                   <div className="detail-section">
@@ -1118,7 +1234,7 @@ export default function App() {
                 {isSubmittingProject ? "Creating..." : "Create Project"}
               </button>
             </form>
-            <div className="entity-list">
+            <div className="entity-list project-list">
               {projects.map((project) => (
                 <article
                   className={`entity-card ${
@@ -1152,12 +1268,13 @@ export default function App() {
             </div>
           </Panel>
 
-          <Panel title="Agents" subtitle="Create agents and run cycles">
+          <Panel title="Agents" subtitle="Create richer agents, attach SKILL.md guides, and run cycles">
             <form className="form-stack" onSubmit={handleCreateAgent}>
               <label>
                 Agent name
                 <input
                   required
+                  placeholder="DesignyBoi"
                   value={agentDraft.name}
                   onChange={(event) =>
                     setAgentDraft((current) => ({
@@ -1192,22 +1309,145 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <button className="primary-button" disabled={isSubmittingAgent} type="submit">
+              <label>
+                Template
+                <select
+                  value={selectedAgentTemplate?.id ?? ""}
+                  onChange={(event) =>
+                    setAgentDraft((current) => ({
+                      ...current,
+                      templateId: event.target.value,
+                    }))
+                  }
+                >
+                  {roleTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                      {template.is_default ? " (default)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="template-picker">
+                {roleTemplates.map((template) => (
+                  <button
+                    className={`template-card ${
+                      selectedAgentTemplate?.id === template.id ? "template-card-active" : ""
+                    }`}
+                    key={template.id}
+                    onClick={() =>
+                      setAgentDraft((current) => ({
+                        ...current,
+                        templateId: template.id,
+                      }))
+                    }
+                    type="button"
+                  >
+                    <div className="entity-meta">
+                      <div>
+                        <h4>{template.name}</h4>
+                        <p>{template.summary}</p>
+                      </div>
+                      {template.is_default ? (
+                        <span className="score-pill">default</span>
+                      ) : null}
+                    </div>
+                    <p className="muted template-preview">{template.instructions}</p>
+                  </button>
+                ))}
+              </div>
+              <label>
+                Custom instructions
+                <textarea
+                  rows={4}
+                  placeholder="Optional: Give this agent your own operating style or constraints."
+                  value={agentDraft.instructions}
+                  onChange={(event) =>
+                    setAgentDraft((current) => ({
+                      ...current,
+                      instructions: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <div className="skill-section">
+                <div className="section-heading">
+                  <h3>Skills</h3>
+                  <p>Select extra behaviors to layer onto this agent.</p>
+                </div>
+                <div className="skill-grid">
+                  {sortedSkills.map((skill) => {
+                    const isSelected = agentDraft.skillIds.includes(skill.id);
+                    const isRecommended = skill.recommended_roles.includes(agentDraft.role);
+                    return (
+                      <label
+                        className={`skill-card ${isSelected ? "skill-card-active" : ""}`}
+                        key={skill.id}
+                      >
+                        <input
+                          checked={isSelected}
+                          onChange={() =>
+                            setAgentDraft((current) => ({
+                              ...current,
+                              skillIds: toggleSelection(current.skillIds, skill.id),
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        <div className="skill-card-copy">
+                          <div className="entity-meta">
+                            <div>
+                              <h4>{skill.name}</h4>
+                              <p>{skill.summary}</p>
+                            </div>
+                            {isRecommended ? (
+                              <span className="score-pill">recommended</span>
+                            ) : null}
+                          </div>
+                          <p className="muted">
+                            {skill.source} • {skill.path}
+                          </p>
+                          <pre className="template-preview markdown-preview">{skill.instructions}</pre>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className="primary-button"
+                disabled={isSubmittingAgent || roleTemplates.length === 0}
+                type="submit"
+              >
                 Create Agent
               </button>
+              {roleTemplates.length === 0 ? (
+                <p className="muted">No templates are available for this role yet.</p>
+              ) : null}
             </form>
-            <div className="entity-list">
+            <div className="entity-list project-list">
               {agents.map((agent) => (
                 <article className="entity-card" key={agent.id}>
                   <div className="entity-meta">
                     <div>
                       <h4>{agent.name}</h4>
-                      <p>{agent.role}</p>
+                      <p>
+                        {agent.role} • {findTemplateName(agent.template_id, agentCatalog.templates)}
+                      </p>
                     </div>
                     <span className={`status-pill status-${mapAgentStatus(agent.status)}`}>
                       {agent.status}
                     </span>
                   </div>
+                  <p>{summarizeAgentInstructions(agent.instructions)}</p>
+                  <p className="muted">
+                    skills:{" "}
+                    {agent.skill_ids.length > 0
+                      ? agent.skill_ids
+                          .map((skillId) => findSkillName(skillId, agentCatalog.skills))
+                          .join(", ")
+                      : "none"}
+                  </p>
                   <p className="muted">
                     current task:{" "}
                     {agent.current_task_id
@@ -1215,14 +1455,24 @@ export default function App() {
                         agent.current_task_id
                       : "none"}
                   </p>
-                  <button
-                    className="secondary-button"
-                    disabled={isRunningAgentId === agent.id}
-                    onClick={() => void handleRunAgent(agent.id)}
-                    type="button"
-                  >
-                    {isRunningAgentId === agent.id ? "Running..." : "Run Once"}
-                  </button>
+                  <div className="task-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={isRunningAgentId === agent.id || isDeletingAgentId === agent.id}
+                      onClick={() => void handleRunAgent(agent.id)}
+                      type="button"
+                    >
+                      {isRunningAgentId === agent.id ? "Running..." : "Run Once"}
+                    </button>
+                    <button
+                      className="danger-button"
+                      disabled={isRunningAgentId === agent.id || isDeletingAgentId === agent.id}
+                      onClick={() => void handleDeleteAgent(agent)}
+                      type="button"
+                    >
+                      {isDeletingAgentId === agent.id ? "Deleting..." : "Delete Agent"}
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -1448,6 +1698,17 @@ function findAgentName(agentId: string, agents: Agent[]) {
   return agents.find((agent) => agent.id === agentId)?.name ?? agentId;
 }
 
+function findTemplateName(templateId: string | null, templates: AgentTemplate[]) {
+  if (!templateId) {
+    return "custom";
+  }
+  return templates.find((template) => template.id === templateId)?.name ?? templateId;
+}
+
+function findSkillName(skillId: string, skills: AgentSkill[]) {
+  return skills.find((skill) => skill.id === skillId)?.name ?? skillId;
+}
+
 function formatTaskProject(projectId: string | null, projects: Project[]) {
   if (!projectId) {
     return "unscoped";
@@ -1484,6 +1745,30 @@ function mapSelfImprovementStatus(status: SelfImprovementRun["status"]) {
     return "failed";
   }
   return "done";
+}
+
+function sortSkillsForRole(skills: AgentSkill[], role: AgentRole) {
+  return [...skills].sort((left, right) => {
+    const leftRecommended = left.recommended_roles.includes(role) ? 0 : 1;
+    const rightRecommended = right.recommended_roles.includes(role) ? 0 : 1;
+    if (leftRecommended !== rightRecommended) {
+      return leftRecommended - rightRecommended;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function toggleSelection(values: string[], nextValue: string) {
+  return values.includes(nextValue)
+    ? values.filter((value) => value !== nextValue)
+    : [...values, nextValue];
+}
+
+function summarizeAgentInstructions(instructions: string | null) {
+  if (!instructions) {
+    return "No extra custom instructions.";
+  }
+  return instructions;
 }
 
 function pushToast(
