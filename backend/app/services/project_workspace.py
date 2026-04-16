@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 from app.config import Settings
@@ -48,6 +49,15 @@ class ProjectWorkspaceService:
             for path in project_directory.rglob("*")
             if path.is_file() and path.name != ".gitkeep"
         )
+
+    def has_workspace_artifacts(self, project_id: str | None) -> bool:
+        return bool(self.list_workspace_artifacts(project_id))
+
+    def delete_project_directory(self, project_id: str | None) -> None:
+        project_directory = self.ensure_project_directory(project_id)
+        if project_directory is None or not project_directory.exists():
+            return
+        shutil.rmtree(project_directory)
 
     @staticmethod
     def normalize_project_id(project_id: str | None) -> str | None:

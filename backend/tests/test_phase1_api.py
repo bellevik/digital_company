@@ -31,6 +31,44 @@ def test_create_and_list_projects(client: TestClient, projects_root) -> None:
     assert len(list_response.json()) == 1
 
 
+def test_delete_project_removes_empty_workspace(client: TestClient, projects_root) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={
+            "id": "platform",
+            "name": "Platform",
+            "description": "Shared platform work.",
+        },
+    )
+
+    delete_response = client.delete("/api/v1/projects/platform")
+
+    assert delete_response.status_code == 204
+    assert client.get("/api/v1/projects").json() == []
+    assert not (projects_root / "platform").exists()
+
+
+def test_delete_project_rejects_projects_with_tasks(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "platform", "name": "Platform", "description": "Shared platform work."},
+    )
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Implement task board",
+            "description": "Create the first task API.",
+            "type": "feature",
+            "project_id": "platform",
+        },
+    )
+
+    delete_response = client.delete("/api/v1/projects/platform")
+
+    assert delete_response.status_code == 409
+    assert delete_response.json()["detail"] == "project_has_tasks"
+
+
 def test_create_and_list_tasks(client: TestClient, projects_root) -> None:
     client.post(
         "/api/v1/projects",

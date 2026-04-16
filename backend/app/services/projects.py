@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models.project import Project
+from app.models.task import Task
 from app.schemas.project import ProjectCreate
 from app.services.project_workspace import ProjectWorkspaceService
 
@@ -76,6 +77,28 @@ class ProjectService:
         self._db.flush()
         self._workspace_service.ensure_project_directory(project.id)
         return project
+
+    def delete_project(self, project_id: str) -> None:
+        normalized_project_id = self._workspace_service.normalize_project_id(project_id)
+        if normalized_project_id is None:
+            raise LookupError("project_not_found")
+
+        project = self._db.get(Project, normalized_project_id)
+        if project is None:
+            raise LookupError("project_not_found")
+
+        task_count = self._db.scalar(
+            select(func.count()).select_from(Task).where(Task.project_id == project.id)
+        ) or 0
+        if task_count > 0:
+            raise ValueError("project_has_tasks")
+
+        if self._workspace_service.has_workspace_artifacts(project.id):
+            raise ValueError("project_has_files")
+
+        self._db.delete(project)
+        self._db.commit()
+        self._workspace_service.delete_project_directory(project.id)
 
 
 def _default_project_name(project_id: str) -> str:

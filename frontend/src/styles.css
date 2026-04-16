@@ -345,6 +345,13 @@ pre {
   min-width: 0;
 }
 
+.card-meta-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
 .task-card-delete {
   width: 1.9rem;
   height: 1.9rem;

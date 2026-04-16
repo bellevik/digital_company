@@ -277,6 +277,7 @@ export default function App() {
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
+  const [isDeletingProjectId, setIsDeletingProjectId] = useState<string | null>(null);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
   const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
@@ -515,6 +516,36 @@ export default function App() {
       );
     } finally {
       setIsSubmittingTask(false);
+    }
+  }
+
+  async function handleDeleteProject(project: Project) {
+    const shouldDelete = window.confirm(
+      `Delete project "${project.name}"? This only works when the project has no tasks and no real files in its workspace.`,
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    setIsDeletingProjectId(project.id);
+    try {
+      await apiDelete(`/api/v1/projects/${project.id}`);
+      if (selectedProjectId === project.id) {
+        setSelectedProjectId(null);
+      }
+      if (taskDraft.projectId === project.id) {
+        setTaskDraft((current) => ({ ...current, projectId: "" }));
+      }
+      await refreshDashboard();
+      pushToast(setToast, "success", "Project deleted.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to delete project.",
+      );
+    } finally {
+      setIsDeletingProjectId(null);
     }
   }
 
@@ -1243,13 +1274,26 @@ export default function App() {
                   key={project.id}
                 >
                   <div className="entity-meta">
-                    <div>
-                      <h4>{project.name}</h4>
-                      <p>{project.id}</p>
+                    <div className="task-card-topline-left">
+                      <div>
+                        <h4>{project.name}</h4>
+                        <p>{project.id}</p>
+                      </div>
                     </div>
-                    <span className="score-pill">
-                      {tasks.filter((task) => task.project_id === project.id).length} task(s)
-                    </span>
+                    <div className="card-meta-actions">
+                      <span className="score-pill">
+                        {tasks.filter((task) => task.project_id === project.id).length} task(s)
+                      </span>
+                      <button
+                        aria-label={`Delete ${project.name}`}
+                        className="task-card-delete"
+                        disabled={isDeletingProjectId !== null}
+                        onClick={() => void handleDeleteProject(project)}
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
                   <p>{project.description ?? "No project description yet."}</p>
                   <p className="muted">workspace: projects/{project.id}</p>
@@ -1305,25 +1349,6 @@ export default function App() {
                   ].map((role) => (
                     <option key={role} value={role}>
                       {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Template
-                <select
-                  value={selectedAgentTemplate?.id ?? ""}
-                  onChange={(event) =>
-                    setAgentDraft((current) => ({
-                      ...current,
-                      templateId: event.target.value,
-                    }))
-                  }
-                >
-                  {roleTemplates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                      {template.is_default ? " (default)" : ""}
                     </option>
                   ))}
                 </select>
