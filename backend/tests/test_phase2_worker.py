@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
@@ -61,6 +62,19 @@ def test_codex_cli_adapter_reports_missing_binary() -> None:
 
     assert result.exit_code == 127
     assert "CODEX_EXECUTION_BACKEND=mock" in result.stderr
+
+
+def test_codex_cli_adapter_uses_explicit_approval_and_sandbox_flags() -> None:
+    adapter = CodexCLIExecutionAdapter(settings=Settings())
+    completed = Mock(returncode=0, stdout='{"summary":"ok","follow_up_tasks":[]}', stderr="")
+
+    with patch("app.services.execution.subprocess.run", return_value=completed) as run_mock:
+        result = adapter.run(prompt="return ok", workdir=Path("/workspace/projects/future_calc"))
+
+    assert result.exit_code == 0
+    command = run_mock.call_args.args[0]
+    assert command[:7] == ["codex", "-a", "never", "exec", "-s", "danger-full-access", "-C"]
+    assert "--full-auto" not in command
 
 
 def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient, projects_root) -> None:

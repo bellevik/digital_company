@@ -32,8 +32,11 @@ class CodexCLIExecutionAdapter:
         command_workdir = workdir or self._settings.resolved_codex_workdir
         command = [
             self._settings.codex_cli_command,
+            "-a",
+            self._settings.codex_cli_approval_policy,
             self._settings.codex_cli_subcommand,
-            self._settings.codex_cli_full_auto_flag,
+            "-s",
+            self._settings.codex_cli_sandbox_mode,
             "-C",
             str(command_workdir),
         ]

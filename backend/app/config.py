@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     codex_execution_backend: str = "codex_cli"
     codex_cli_command: str = "codex"
     codex_cli_subcommand: str = "exec"
-    codex_cli_full_auto_flag: str = "--full-auto"
+    codex_cli_approval_policy: str = "never"
+    codex_cli_sandbox_mode: str = "danger-full-access"
     codex_workdir: Path | None = None
 
     postgres_host: str = "localhost"
