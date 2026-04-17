@@ -61,6 +61,7 @@ class WorkerService:
             execution_result = self._execute_prompt(
                 prompt=claimed_context.prompt,
                 workdir=claimed_context.workdir,
+                run_id=claimed_context.run.id,
             )
             return self._finalize_run(
                 agent_id=agent.id,
@@ -238,9 +239,19 @@ class WorkerService:
             follow_up_task_ids=[],
         )
 
-    def _execute_prompt(self, *, prompt: str, workdir: Path | None) -> ExecutionResult:
+    def _execute_prompt(
+        self,
+        *,
+        prompt: str,
+        workdir: Path | None,
+        run_id: uuid.UUID,
+    ) -> ExecutionResult:
         try:
-            return self._execution_adapter.run(prompt=prompt, workdir=workdir)
+            return self._execution_adapter.run(
+                prompt=prompt,
+                workdir=workdir,
+                on_output=self._build_output_handler(run_id=run_id),
+            )
         except Exception as exc:  # noqa: BLE001
             return ExecutionResult(
                 stdout="",
@@ -248,6 +259,19 @@ class WorkerService:
                 exit_code=1,
                 command=["execution-error"],
             )
+
+    def _build_output_handler(self, *, run_id: uuid.UUID):
+        def handle_output(stream_name: str, chunk: str) -> None:
+            running_run = self._db.get(TaskRun, run_id)
+            if running_run is None or running_run.status != TaskRunStatus.RUNNING:
+                return
+            if stream_name == "stdout":
+                running_run.stdout = f"{running_run.stdout}{chunk}"
+            else:
+                running_run.stderr = f"{running_run.stderr}{chunk}"
+            self._db.commit()
+
+        return handle_output
 
     def _finalize_run(
         self,

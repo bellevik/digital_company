@@ -35,9 +35,20 @@ class FakeExecutionAdapter:
         self.workdirs: list[str | None] = []
         self._files_to_create = files_to_create or []
 
-    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+    def run(
+        self,
+        *,
+        prompt: str,
+        workdir: Path | None = None,
+        on_output=None,
+    ) -> ExecutionResult:
         self.prompts.append(prompt)
         self.workdirs.append(str(workdir) if workdir is not None else None)
+        if on_output is not None:
+            if self._result.stderr:
+                on_output("stderr", self._result.stderr)
+            if self._result.stdout:
+                on_output("stdout", self._result.stdout)
         if workdir is not None:
             for relative_path in self._files_to_create:
                 target = workdir / relative_path
@@ -50,7 +61,7 @@ class FakeExplodingExecutionAdapter:
     def __init__(self, *, message: str = "boom") -> None:
         self._message = message
 
-    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+    def run(self, *, prompt: str, workdir: Path | None = None, on_output=None) -> ExecutionResult:
         raise RuntimeError(self._message)
 
 
@@ -67,13 +78,27 @@ def test_codex_cli_adapter_reports_missing_binary() -> None:
 
 def test_codex_cli_adapter_uses_explicit_approval_and_sandbox_flags() -> None:
     adapter = CodexCLIExecutionAdapter(settings=Settings())
-    completed = Mock(returncode=0, stdout='{"summary":"ok","follow_up_tasks":[]}', stderr="")
+    process = Mock()
+    process.stdout = Mock()
+    process.stderr = Mock()
+    process.stdout.readline = Mock(side_effect=['{"summary":"ok","follow_up_tasks":[]}', ""])
+    process.stderr.readline = Mock(side_effect=[""])
+    process.wait = Mock(return_value=0)
+    selector_instance = Mock()
+    selector_instance.get_map = Mock(side_effect=[{"stdout": object()}, {}])
+    selector_instance.select = Mock(
+        return_value=[(Mock(fileobj=process.stdout, data=("stdout", [])), None)]
+    )
+    selector_instance.unregister = Mock()
 
-    with patch("app.services.execution.subprocess.run", return_value=completed) as run_mock:
+    with patch("app.services.execution.subprocess.Popen", return_value=process) as popen_mock, patch(
+        "app.services.execution.selectors.DefaultSelector",
+        return_value=selector_instance,
+    ):
         result = adapter.run(prompt="return ok", workdir=Path("/workspace/projects/future_calc"))
 
     assert result.exit_code == 0
-    command = run_mock.call_args.args[0]
+    command = popen_mock.call_args.args[0]
     assert command[:7] == ["codex", "-a", "never", "exec", "-s", "danger-full-access", "-C"]
     assert "--full-auto" not in command
 

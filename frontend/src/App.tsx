@@ -254,7 +254,7 @@ type Toast = {
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-const refreshIntervalMs = 6000;
+const refreshIntervalMs = 2500;
 
 const defaultTaskDraft = {
   title: "",
@@ -447,9 +447,13 @@ export default function App() {
     }
 
     void loadTaskEvents();
+    const intervalId = window.setInterval(() => {
+      void loadTaskEvents();
+    }, refreshIntervalMs);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [selectedTaskId]);
 
@@ -1170,13 +1174,24 @@ export default function App() {
                             follow-up tasks: {taskRun.created_follow_up_tasks} • exit code:{" "}
                             {taskRun.exit_code ?? "n/a"}
                           </p>
-                          <details>
+                          {taskRun.status === "running" ? (
+                            <div className="live-run-summary">
+                              <strong>Live update:</strong>{" "}
+                              {summarizeRunProgress(taskRun)}
+                              <span className="muted"> • updated {formatDateTime(taskRun.updated_at)}</span>
+                            </div>
+                          ) : null}
+                          <details open={taskRun.status === "running"}>
                             <summary>stdout</summary>
-                            <pre>{taskRun.stdout || "No stdout captured."}</pre>
+                            <pre>{taskRun.stdout || (taskRun.status === "running" ? "Waiting for stdout..." : "No stdout captured.")}</pre>
+                          </details>
+                          <details open={taskRun.status === "running"}>
+                            <summary>stderr</summary>
+                            <pre>{taskRun.stderr || (taskRun.status === "running" ? "Waiting for stderr..." : "No stderr captured.")}</pre>
                           </details>
                           <details>
-                            <summary>stderr</summary>
-                            <pre>{taskRun.stderr || "No stderr captured."}</pre>
+                            <summary>prompt</summary>
+                            <pre>{taskRun.prompt}</pre>
                           </details>
                         </article>
                       ))}
@@ -2058,6 +2073,26 @@ function mapSelfImprovementStatus(status: SelfImprovementRun["status"]) {
     return "failed";
   }
   return "done";
+}
+
+function summarizeRunProgress(taskRun: TaskRun) {
+  const latestStderrLine = lastNonEmptyLine(taskRun.stderr);
+  if (latestStderrLine) {
+    return latestStderrLine;
+  }
+  const latestStdoutLine = lastNonEmptyLine(taskRun.stdout);
+  if (latestStdoutLine) {
+    return latestStdoutLine;
+  }
+  return "Agent started, waiting for terminal output.";
+}
+
+function lastNonEmptyLine(value: string) {
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines[lines.length - 1] ?? "";
 }
 
 function sortSkillsForRole(skills: AgentSkill[], role: AgentRole) {

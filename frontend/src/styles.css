@@ -385,6 +385,15 @@ pre {
   line-height: 1.6;
 }
 
+.live-run-summary {
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(61, 161, 255, 0.09);
+  border: 1px solid rgba(61, 161, 255, 0.18);
+  line-height: 1.5;
+}
+
 .tag,
 .approval,
 .status-pill,
@@ -500,6 +509,8 @@ pre {
   padding: 0.8rem;
   border-radius: 14px;
   background: rgba(16, 32, 51, 0.06);
+  max-height: 18rem;
+  overflow: auto;
 }
 
 .form-stack label {

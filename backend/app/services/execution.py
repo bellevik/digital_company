@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import selectors
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from app.config import Settings
 
@@ -19,8 +20,17 @@ class ExecutionResult:
     command: list[str]
 
 
+OutputCallback = Callable[[str, str], None]
+
+
 class ExecutionAdapter(Protocol):
-    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+    def run(
+        self,
+        *,
+        prompt: str,
+        workdir: Path | None = None,
+        on_output: OutputCallback | None = None,
+    ) -> ExecutionResult:
         ...
 
 
@@ -28,7 +38,13 @@ class CodexCLIExecutionAdapter:
     def __init__(self, settings: Settings):
         self._settings = settings
 
-    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+    def run(
+        self,
+        *,
+        prompt: str,
+        workdir: Path | None = None,
+        on_output: OutputCallback | None = None,
+    ) -> ExecutionResult:
         command_workdir = workdir or self._settings.resolved_codex_workdir
         command = [
             self._settings.codex_cli_command,
@@ -52,12 +68,13 @@ class CodexCLIExecutionAdapter:
             },
         )
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
-                capture_output=True,
-                input="",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                check=False,
+                stdin=subprocess.DEVNULL,
+                bufsize=1,
             )
         except FileNotFoundError:
             return ExecutionResult(
@@ -70,33 +87,68 @@ class CodexCLIExecutionAdapter:
                 exit_code=127,
                 command=command,
             )
+
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+        selector = selectors.DefaultSelector()
+        if process.stdout is not None:
+            selector.register(process.stdout, selectors.EVENT_READ, ("stdout", stdout_parts))
+        if process.stderr is not None:
+            selector.register(process.stderr, selectors.EVENT_READ, ("stderr", stderr_parts))
+
+        while selector.get_map():
+            for key, _ in selector.select():
+                stream_name, sink = key.data
+                chunk = key.fileobj.readline()
+                if chunk == "":
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                sink.append(chunk)
+                if on_output is not None:
+                    on_output(stream_name, chunk)
+
+        return_code = process.wait()
+        stdout = "".join(stdout_parts)
+        stderr = "".join(stderr_parts)
         logger.info(
             "Codex CLI finished",
             extra={
                 "workdir": str(command_workdir),
-                "exit_code": completed.returncode,
-                "stdout_length": len(completed.stdout),
-                "stderr_length": len(completed.stderr),
+                "exit_code": return_code,
+                "stdout_length": len(stdout),
+                "stderr_length": len(stderr),
             },
         )
         return ExecutionResult(
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-            exit_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=return_code,
             command=command,
         )
 
 
 class MockExecutionAdapter:
-    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+    def run(
+        self,
+        *,
+        prompt: str,
+        workdir: Path | None = None,
+        on_output: OutputCallback | None = None,
+    ) -> ExecutionResult:
+        stdout = (
+            '{"summary":"Mock execution completed.","memory_summary":"Mock run",'
+            '"memory_content":"Mock backend configured without Codex CLI.",'
+            '"artifact_paths":["mock-output.txt"],'
+            '"follow_up_tasks":[]}'
+        )
+        stderr = ""
+        if on_output is not None:
+            on_output("stderr", "Mock executor starting...\n")
+            on_output("stdout", stdout)
         return ExecutionResult(
-            stdout=(
-                '{"summary":"Mock execution completed.","memory_summary":"Mock run",'
-                '"memory_content":"Mock backend configured without Codex CLI.",'
-                '"artifact_paths":["mock-output.txt"],'
-                '"follow_up_tasks":[]}'
-            ),
-            stderr="",
+            stdout=stdout,
+            stderr=stderr,
             exit_code=0,
             command=["mock-executor", str(workdir) if workdir is not None else "", prompt],
         )
