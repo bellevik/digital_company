@@ -226,6 +226,13 @@ pre {
   gap: 0.8rem;
 }
 
+.activity-feed,
+.run-stack {
+  max-height: 52rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
 .project-list {
   margin-top: 0.8rem;
 }
