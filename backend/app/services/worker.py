@@ -27,6 +27,7 @@ from app.services.project_workspace import ProjectWorkspaceService
 from app.services.project_plans import ProjectPlanService
 from app.services.projects import ProjectService
 from app.services.prompting import get_role_profile, build_prompt
+from app.services.task_routing import task_matches_role
 from app.services.workflow import WorkflowService
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,9 @@ class WorkerService:
 
         for task_id in candidate_ids:
             try:
+                preview_task = self._db.get(Task, task_id)
+                if preview_task is None or not task_matches_role(task=preview_task, role=agent.role):
+                    continue
                 task = claim_task(db=self._db, task_id=task_id, agent_id=agent.id)
                 prompt = build_prompt(
                     agent=agent,

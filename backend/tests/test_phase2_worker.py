@@ -10,9 +10,10 @@ from app.api.dependencies import execution_adapter_dependency
 from app.config import Settings
 from app.main import app
 from app.models.agent import Agent
-from app.models.common import AgentRole
+from app.models.common import AgentRole, TaskType
 from app.services.execution import CodexCLIExecutionAdapter, ExecutionResult
 from app.services.agent_catalog import default_template_id_for_role
+from app.services.task_routing import preferred_role_for_task
 
 
 class FakeExecutionAdapter:
@@ -75,6 +76,24 @@ def test_codex_cli_adapter_uses_explicit_approval_and_sandbox_flags() -> None:
     command = run_mock.call_args.args[0]
     assert command[:7] == ["codex", "-a", "never", "exec", "-s", "danger-full-access", "-C"]
     assert "--full-auto" not in command
+
+
+def test_task_routing_prefers_specialized_roles() -> None:
+    assert preferred_role_for_task(
+        title="Build calculator shell",
+        description="Implement the initial app shell.",
+        task_type=TaskType.FEATURE,
+    ) == AgentRole.DEVELOPER
+    assert preferred_role_for_task(
+        title="Establish visual direction and motion rules",
+        description="Set the visual design direction and animation rules.",
+        task_type=TaskType.FEATURE,
+    ) == AgentRole.DESIGNER
+    assert preferred_role_for_task(
+        title="Define spectacle-first product scope",
+        description="Lock the feature envelope and explicit exclusions.",
+        task_type=TaskType.RESEARCH,
+    ) == AgentRole.ARCHITECT
 
 
 def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient, projects_root) -> None:
@@ -181,6 +200,47 @@ def test_planner_run_creates_pending_plan_and_approval_queues_tasks(client: Test
     tasks = client.get("/api/v1/tasks").json()
     queued = [task for task in tasks if task["plan_id"] == plan["id"] and task["type"] != "idea"]
     assert len(queued) == 2
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_architect_idles_when_only_developer_feature_tasks_exist(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    architect = client.post("/api/v1/agents", json={"name": "arch-idle", "role": "architect"}).json()
+    developer = client.post("/api/v1/agents", json={"name": "dev-shell", "role": "developer"}).json()
+    feature_task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Build calculator shell",
+            "description": "Implement the initial app shell.",
+            "type": "feature",
+            "project_id": "futurecalc",
+        },
+    ).json()
+    client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Future plan",
+            "idea_description": "This should stay for the planner.",
+        },
+    )
+
+    idle_response = client.post(f"/api/v1/agents/{architect['id']}/work")
+    assert idle_response.status_code == 200
+    assert idle_response.json()["outcome"] == "idle"
+
+    app.dependency_overrides[execution_adapter_dependency] = lambda: FakeExecutionAdapter(
+        stdout='{"summary":"done","memory_summary":"done","memory_content":"done","artifact_paths":["shell.md"],"follow_up_tasks":[]}',
+        files_to_create=["shell.md"],
+    )
+    developer_response = client.post(f"/api/v1/agents/{developer['id']}/work")
+
+    assert developer_response.status_code == 200
+    assert developer_response.json()["outcome"] == "completed"
+    assert developer_response.json()["task_id"] == feature_task["id"]
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 
