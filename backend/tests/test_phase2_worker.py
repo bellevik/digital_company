@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import execution_adapter_dependency
 from app.config import Settings
 from app.main import app
+from app.models.agent import Agent
 from app.models.common import AgentRole
 from app.services.execution import CodexCLIExecutionAdapter, ExecutionResult
 from app.services.agent_catalog import default_template_id_for_role
@@ -443,5 +445,96 @@ def test_delete_agent_succeeds_only_without_history(client: TestClient) -> None:
     blocked_delete = client.delete(f"/api/v1/agents/{historical['id']}")
     assert blocked_delete.status_code == 409
     assert "execution history" in blocked_delete.json()["detail"]
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_run_agent_once_tolerates_stale_template_and_skill_ids(
+    client: TestClient,
+    session,
+    projects_root,
+) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    adapter = FakeExecutionAdapter(
+        stdout=(
+            '{"summary":"Implemented bounded slice.",'
+            '"memory_summary":"bounded slice",'
+            '"memory_content":"Completed the scoped work.",'
+            '"artifact_paths":["notes/result.md"],'
+            '"follow_up_tasks":[]}'
+        ),
+        files_to_create=["notes/result.md"],
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    agent_payload = client.post("/api/v1/agents", json={"name": "stale-dev", "role": "developer"}).json()
+    task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Complete bounded slice",
+            "description": "Finish the scoped implementation.",
+            "type": "feature",
+            "project_id": "futurecalc",
+        },
+    ).json()
+
+    persisted_agent = session.get(Agent, uuid.UUID(agent_payload["id"]))
+    assert persisted_agent is not None
+    persisted_agent.template_id = "missing-template"
+    persisted_agent.skill_ids = ["missing-skill", "testing_strategy"]
+    session.commit()
+
+    response = client.post(f"/api/v1/agents/{agent_payload['id']}/work")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["outcome"] == "completed"
+    assert payload["task_id"] == task["id"]
+    assert "Skill: Testing Strategy" in adapter.prompts[0]
+    assert "missing-skill" not in adapter.prompts[0]
+    assert "Senior Builder" in adapter.prompts[0]
+    assert (projects_root / "futurecalc" / "notes" / "result.md").is_file()
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_planner_invalid_structured_output_fails_instead_of_500(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Pitch futuristic calculator",
+            "idea_description": "Turn the idea into a bounded plan before building.",
+        },
+    )
+    adapter = FakeExecutionAdapter(
+        stdout=(
+            '{"summary":"Planner produced a draft.",'
+            '"plan_summary":"Draft plan.",'
+            '"max_total_tasks":2,'
+            '"planned_tasks":['
+            '{"title":"Define visual direction","description":"Prepare the design direction.","type":"design","spawn_budget":0}'
+            ']}'
+        )
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    planner = client.post("/api/v1/agents", json={"name": "planner-invalid", "role": "planner"}).json()
+
+    response = client.post(f"/api/v1/agents/{planner['id']}/work")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["outcome"] == "failed"
+    assert payload["task_run"]["status"] == "failed"
+    assert payload["task_run"]["result_payload"]["final_status"] == "failed"
+    assert "did not match the required schema" in payload["task_run"]["result_payload"]["summary"]
+
+    plans = client.get("/api/v1/project-plans", params={"project_id": "futurecalc"}).json()
+    assert plans[0]["status"] == "draft"
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)

@@ -245,6 +245,17 @@ def resolve_agent_template(*, role: AgentRole, template_id: str | None) -> Agent
     return template
 
 
+def resolve_agent_template_for_runtime(
+    *,
+    role: AgentRole,
+    template_id: str | None,
+) -> AgentTemplateDefinition:
+    try:
+        return resolve_agent_template(role=role, template_id=template_id)
+    except ValueError:
+        return resolve_agent_template(role=role, template_id=None)
+
+
 def resolve_agent_skills(
     skill_ids: list[str],
     *,
@@ -259,6 +270,25 @@ def resolve_agent_skills(
         skill = available_skills.get(skill_id)
         if skill is None:
             raise ValueError(f"Unknown skill_id '{skill_id}'.")
+        resolved.append(skill)
+        seen.add(skill_id)
+    return resolved
+
+
+def resolve_agent_skills_for_runtime(
+    skill_ids: list[str],
+    *,
+    repo_root: Path | None = None,
+) -> list[AgentSkillDefinition]:
+    resolved: list[AgentSkillDefinition] = []
+    available_skills = {skill.id: skill for skill in list_agent_skills(repo_root=repo_root)}
+    seen: set[str] = set()
+    for skill_id in skill_ids:
+        if skill_id in seen:
+            continue
+        skill = available_skills.get(skill_id)
+        if skill is None:
+            continue
         resolved.append(skill)
         seen.add(skill_id)
     return resolved

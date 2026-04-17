@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -220,7 +221,7 @@ class WorkerService:
                     )
                 )
 
-            if task.type == TaskType.IDEA:
+            if task.type == TaskType.IDEA and final_status == TaskRunStatus.SUCCEEDED:
                 self._plan_service().replace_plan_from_idea_task(task=task, payload=payload)
             elif payload.follow_up_tasks:
                 if task.plan_id is not None:
@@ -330,6 +331,7 @@ def _parse_worker_payload(raw_output: str) -> WorkerExecutionPayload | None:
             candidate = candidate[first_break + 1 : last_fence].strip()
 
     decoder = json.JSONDecoder()
+    saw_invalid_json_payload = False
     for index, char in enumerate(candidate):
         if char != "{":
             continue
@@ -337,11 +339,20 @@ def _parse_worker_payload(raw_output: str) -> WorkerExecutionPayload | None:
             parsed, _ = decoder.raw_decode(candidate[index:])
         except json.JSONDecodeError:
             continue
-        return WorkerExecutionPayload.model_validate(parsed)
+        try:
+            return WorkerExecutionPayload.model_validate(parsed)
+        except ValidationError:
+            saw_invalid_json_payload = True
+            continue
 
     return WorkerExecutionPayload(
-        summary="Execution completed without structured JSON output.",
-        memory_summary="Unstructured execution output",
+        summary=(
+            "Execution returned JSON that did not match the required schema."
+            if saw_invalid_json_payload
+            else "Execution completed without structured JSON output."
+        ),
+        memory_summary="Invalid execution output" if saw_invalid_json_payload else "Unstructured execution output",
         memory_content=raw_output,
+        final_status=TaskRunStatus.FAILED,
         follow_up_tasks=[],
     )

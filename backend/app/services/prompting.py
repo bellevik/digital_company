@@ -7,7 +7,10 @@ from app.models.agent import Agent
 from app.models.common import AgentRole, TaskType
 from app.schemas.memory_search import MemorySearchResult
 from app.models.task import Task
-from app.services.agent_catalog import resolve_agent_skills, resolve_agent_template
+from app.services.agent_catalog import (
+    resolve_agent_skills_for_runtime,
+    resolve_agent_template_for_runtime,
+)
 
 
 @dataclass(frozen=True)
@@ -87,8 +90,8 @@ def build_prompt(
     plan_context: str | None = None,
 ) -> str:
     role_profile = get_role_profile(agent.role)
-    template = resolve_agent_template(role=agent.role, template_id=agent.template_id)
-    active_skills = resolve_agent_skills(agent.skill_ids or [], repo_root=repo_root)
+    template = resolve_agent_template_for_runtime(role=agent.role, template_id=agent.template_id)
+    active_skills = resolve_agent_skills_for_runtime(agent.skill_ids or [], repo_root=repo_root)
     memory_block = _format_memories(memories)
     workspace_block = _format_workspace_context(
         repo_root=repo_root,
