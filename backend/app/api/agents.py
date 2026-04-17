@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -28,6 +29,8 @@ from app.services.agent_catalog import (
 )
 from app.services.execution import ExecutionAdapter
 from app.services.worker import WorkerService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -152,3 +155,6 @@ def run_agent_once(
         return service.run_agent_once(agent_id=agent_id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Agent work endpoint failed", extra={"agent_id": str(agent_id)})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="agent_work_failed") from exc

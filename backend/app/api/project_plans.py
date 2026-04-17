@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,8 @@ from app.config import get_settings
 from app.schemas.project_plan import IdeaPitchRequest, PlanChangeRequest, ProjectPlanRead
 from app.services.project_plans import ProjectPlanService
 from app.services.projects import ProjectService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/project-plans", tags=["project-plans"])
 
@@ -42,6 +45,9 @@ def pitch_project_idea(
         return service.pitch_idea(project_id=project_id, payload=payload)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project_not_found") from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Project idea pitch failed", extra={"project_id": project_id})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="project_pitch_failed") from exc
 
 
 @router.post("/{plan_id}/approve", response_model=ProjectPlanRead)

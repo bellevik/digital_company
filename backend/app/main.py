@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from functools import partial
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,11 @@ from app.services.self_improvement import SelfImprovementService
 from app.services.system_runtime import scheduler_runtime
 
 settings = get_settings()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 
 @asynccontextmanager

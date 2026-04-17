@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -37,6 +40,14 @@ class CodexCLIExecutionAdapter:
         if command_workdir != self._settings.resolved_codex_workdir:
             command.extend(["--add-dir", str(self._settings.resolved_codex_workdir)])
         command.append(prompt)
+        logger.info(
+            "Running Codex CLI",
+            extra={
+                "command": command[:-1],
+                "workdir": str(command_workdir),
+                "prompt_length": len(prompt),
+            },
+        )
         try:
             completed = subprocess.run(
                 command,
@@ -56,6 +67,15 @@ class CodexCLIExecutionAdapter:
                 exit_code=127,
                 command=command,
             )
+        logger.info(
+            "Codex CLI finished",
+            extra={
+                "workdir": str(command_workdir),
+                "exit_code": completed.returncode,
+                "stdout_length": len(completed.stdout),
+                "stderr_length": len(completed.stderr),
+            },
+        )
         return ExecutionResult(
             stdout=completed.stdout,
             stderr=completed.stderr,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import traceback
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -27,6 +29,8 @@ from app.services.projects import ProjectService
 from app.services.prompting import get_role_profile, build_prompt
 from app.services.workflow import WorkflowService
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class ClaimedTaskContext:
@@ -47,20 +51,36 @@ class WorkerService:
         if agent is None:
             raise LookupError("agent_not_found")
 
-        claimed_context = self._claim_next_task(agent=agent)
-        if claimed_context is None:
-            return WorkerCycleResponse(agent_id=agent.id, outcome="idle")
+        claimed_context: ClaimedTaskContext | None = None
+        try:
+            claimed_context = self._claim_next_task(agent=agent)
+            if claimed_context is None:
+                return WorkerCycleResponse(agent_id=agent.id, outcome="idle")
 
-        execution_result = self._execute_prompt(
-            prompt=claimed_context.prompt,
-            workdir=claimed_context.workdir,
-        )
-        return self._finalize_run(
-            agent_id=agent.id,
-            task_id=claimed_context.task.id,
-            run_id=claimed_context.run.id,
-            execution_result=execution_result,
-        )
+            execution_result = self._execute_prompt(
+                prompt=claimed_context.prompt,
+                workdir=claimed_context.workdir,
+            )
+            return self._finalize_run(
+                agent_id=agent.id,
+                task_id=claimed_context.task.id,
+                run_id=claimed_context.run.id,
+                execution_result=execution_result,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "Worker crashed unexpectedly",
+                extra={
+                    "agent_id": str(agent_id),
+                    "task_id": str(claimed_context.task.id) if claimed_context is not None else None,
+                    "task_run_id": str(claimed_context.run.id) if claimed_context is not None else None,
+                },
+            )
+            return self._finalize_crash(
+                agent_id=agent_id,
+                claimed_context=claimed_context,
+                exc=exc,
+            )
 
     def _claim_next_task(self, *, agent: Agent) -> ClaimedTaskContext | None:
         supported_task_types = get_role_profile(agent.role).supported_task_types
@@ -137,6 +157,82 @@ class WorkerService:
 
     def _plan_service(self) -> ProjectPlanService:
         return ProjectPlanService(db=self._db, project_service=self._project_service())
+
+    def _finalize_crash(
+        self,
+        *,
+        agent_id: uuid.UUID,
+        claimed_context: ClaimedTaskContext | None,
+        exc: Exception,
+    ) -> WorkerCycleResponse:
+        self._db.rollback()
+
+        agent = self._db.get(Agent, agent_id)
+        if agent is not None:
+            agent.status = AgentStatus.IDLE
+            agent.current_task_id = None
+
+        if claimed_context is None:
+            if agent is not None:
+                self._db.commit()
+            return WorkerCycleResponse(agent_id=agent_id, outcome="failed")
+
+        task = self._db.get(Task, claimed_context.task.id)
+        run = self._db.get(TaskRun, claimed_context.run.id)
+        error_message = "".join(traceback.format_exception(exc)).strip()
+
+        if task is not None:
+            task.status = TaskStatus.FAILED
+            task.completed_at = datetime.now(timezone.utc)
+            self._db.add(
+                TaskEvent(
+                    task_id=task.id,
+                    agent_id=agent_id,
+                    event_type=EventType.TASK_UPDATED,
+                    payload={
+                        "action": "execution_crashed",
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                    },
+                )
+            )
+            self._plan_service().sync_task_status(task=task)
+
+        if run is not None:
+            run.status = TaskRunStatus.FAILED
+            run.stderr = "\n".join(part for part in [run.stderr, error_message] if part)
+            run.exit_code = run.exit_code if run.exit_code is not None else 1
+            run.finished_at = datetime.now(timezone.utc)
+            if not run.result_payload:
+                run.result_payload = {
+                    "summary": "Worker crashed unexpectedly.",
+                    "memory_summary": None,
+                    "memory_content": error_message,
+                    "plan_summary": None,
+                    "max_total_tasks": None,
+                    "planned_tasks": [],
+                    "final_status": TaskRunStatus.FAILED.value,
+                    "artifact_paths": [],
+                    "follow_up_tasks": [],
+                }
+
+        if task is not None:
+            WorkflowService(db=self._db).ensure_workflow(
+                task=task,
+                latest_task_run_id=run.id if run is not None else None,
+            )
+        self._db.commit()
+        if run is not None:
+            self._db.refresh(run)
+
+        return WorkerCycleResponse(
+            agent_id=agent_id,
+            outcome="failed",
+            task_id=task.id if task is not None else claimed_context.task.id,
+            task_run=run,
+            memory_id=None,
+            follow_up_task_ids=[],
+        )
 
     def _execute_prompt(self, *, prompt: str, workdir: Path | None) -> ExecutionResult:
         try:

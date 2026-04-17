@@ -44,6 +44,14 @@ class FakeExecutionAdapter:
         return self._result
 
 
+class FakeExplodingExecutionAdapter:
+    def __init__(self, *, message: str = "boom") -> None:
+        self._message = message
+
+    def run(self, *, prompt: str, workdir: Path | None = None) -> ExecutionResult:
+        raise RuntimeError(self._message)
+
+
 def test_codex_cli_adapter_reports_missing_binary() -> None:
     adapter = CodexCLIExecutionAdapter(
         settings=Settings(codex_cli_command="definitely-missing-codex-binary")
@@ -536,5 +544,40 @@ def test_planner_invalid_structured_output_fails_instead_of_500(client: TestClie
 
     plans = client.get("/api/v1/project-plans", params={"project_id": "futurecalc"}).json()
     assert plans[0]["status"] == "draft"
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_unexpected_worker_exception_becomes_failed_run_instead_of_500(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: FakeExplodingExecutionAdapter(
+        message="planner adapter crashed"
+    )
+    agent = client.post("/api/v1/agents", json={"name": "planner-boom", "role": "planner"}).json()
+    task = client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Pitch futuristic calculator",
+            "idea_description": "Turn the idea into a bounded plan before building.",
+        },
+    ).json()
+
+    response = client.post(f"/api/v1/agents/{agent['id']}/work")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["outcome"] == "failed"
+    assert payload["task_id"] == task["planning_task_id"]
+    assert payload["task_run"]["status"] == "failed"
+    assert "planner adapter crashed" in payload["task_run"]["stderr"]
+
+    tasks = client.get("/api/v1/tasks").json()
+    idea_task = next(item for item in tasks if item["id"] == task["planning_task_id"])
+    assert idea_task["status"] == "failed"
 
     app.dependency_overrides.pop(execution_adapter_dependency, None)
