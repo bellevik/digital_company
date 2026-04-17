@@ -18,6 +18,14 @@ class RoleProfile:
 
 
 ROLE_PROFILES: dict[AgentRole, RoleProfile] = {
+    AgentRole.PLANNER: RoleProfile(
+        role=AgentRole.PLANNER,
+        supported_task_types=(TaskType.IDEA,),
+        prompt_instruction=(
+            "Approach the task as a planning lead. Turn the idea into a concrete, bounded project plan "
+            "that a human can approve before execution starts."
+        ),
+    ),
     AgentRole.DESIGNER: RoleProfile(
         role=AgentRole.DESIGNER,
         supported_task_types=(TaskType.FEATURE, TaskType.RESEARCH),
@@ -76,6 +84,7 @@ def build_prompt(
     memories: list[MemorySearchResult],
     repo_root: Path,
     project_workspace: Path | None,
+    plan_context: str | None = None,
 ) -> str:
     role_profile = get_role_profile(agent.role)
     template = resolve_agent_template(role=agent.role, template_id=agent.template_id)
@@ -119,26 +128,13 @@ Workspace:
 Recent memory context:
 {memory_block}
 
-Return JSON only with this shape:
-{{
-  "summary": "short execution summary",
-  "memory_summary": "short memory title",
-  "memory_content": "durable implementation notes",
-  "artifact_paths": ["relative/path/inside/project/workspace"],
-  "follow_up_tasks": [
-    {{
-      "title": "task title",
-      "description": "task description",
-      "type": "feature|bugfix|research|review|ops",
-      "project_id": "optional project id"
-    }}
-  ]
-}}
+Project plan context:
+{plan_context or "No approved project plan context available."}
 
-For project-scoped tasks, create or update concrete files inside the project workspace before reporting success.
-If no concrete artifact is produced for a project-scoped task, return "final_status": "failed" and explain the blocker.
-List artifact_paths relative to the project workspace. Omit artifact_paths only when there is genuinely no filesystem artifact.
-Omit follow_up_tasks when none are needed. Do not include markdown fences.
+Return JSON only with this shape:
+{_response_schema_for_task(task.type)}
+
+{_output_rules_for_task(task.type)}
 """
 
 
@@ -181,4 +177,55 @@ def _format_skills(skills) -> str:
             f"Instructions:\n{skill.instructions}"
         )
         for skill in skills
+    )
+
+
+def _response_schema_for_task(task_type: TaskType) -> str:
+    if task_type == TaskType.IDEA:
+        return """{
+  "summary": "short planning summary",
+  "memory_summary": "short memory title",
+  "memory_content": "durable planning notes",
+  "plan_summary": "human-readable project plan summary",
+  "max_total_tasks": 8,
+  "planned_tasks": [
+    {
+      "title": "task title",
+      "description": "task description",
+      "type": "feature|bugfix|research|review|ops",
+      "spawn_budget": 0
+    }
+  ]
+}"""
+
+    return """{
+  "summary": "short execution summary",
+  "memory_summary": "short memory title",
+  "memory_content": "durable implementation notes",
+  "artifact_paths": ["relative/path/inside/project/workspace"],
+  "follow_up_tasks": [
+    {
+      "title": "task title",
+      "description": "task description",
+      "type": "feature|bugfix|research|review|ops",
+      "project_id": "optional project id"
+    }
+  ]
+}"""
+
+
+def _output_rules_for_task(task_type: TaskType) -> str:
+    if task_type == TaskType.IDEA:
+        return (
+            "Do not create filesystem artifacts for an idea pitch. Focus on a bounded plan only.\n"
+            "planned_tasks should only contain work that belongs in the approved project plan.\n"
+            "max_total_tasks must cap the full task count for this plan, including future spawned tasks.\n"
+            "Use spawn_budget on a planned task only when follow-up work may be necessary after implementation."
+        )
+
+    return (
+        "For project-scoped tasks, create or update concrete files inside the project workspace before reporting success.\n"
+        'If no concrete artifact is produced for a project-scoped task, return "final_status": "failed" and explain the blocker.\n'
+        "List artifact_paths relative to the project workspace. Omit artifact_paths only when there is genuinely no filesystem artifact.\n"
+        "Omit follow_up_tasks when none are needed. Do not include markdown fences."
     )

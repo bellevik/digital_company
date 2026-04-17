@@ -30,6 +30,27 @@ class AgentSkillDefinition:
 
 AGENT_TEMPLATES: tuple[AgentTemplateDefinition, ...] = (
     AgentTemplateDefinition(
+        id="planner_delivery_strategist",
+        role=AgentRole.PLANNER,
+        name="Delivery Strategist",
+        summary="Turns an idea into a bounded execution plan with explicit task budget.",
+        instructions=(
+            "You are a senior delivery planner. Convert ideas into an executable, finite plan with "
+            "clear task boundaries, practical sequencing, and an explicit cap on future task growth."
+        ),
+        is_default=True,
+    ),
+    AgentTemplateDefinition(
+        id="planner_product_scout",
+        role=AgentRole.PLANNER,
+        name="Product Scout",
+        summary="Frames product ideas, risk, and recommended implementation phases.",
+        instructions=(
+            "You are a product planning lead. Clarify the value of the idea, map the major phases, "
+            "and propose only the work needed to validate and ship it without runaway scope."
+        ),
+    ),
+    AgentTemplateDefinition(
         id="designer_product_strategist",
         role=AgentRole.DESIGNER,
         name="Product Strategist",

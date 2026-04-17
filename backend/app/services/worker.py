@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models.agent import Agent
-from app.models.common import AgentStatus, EventType, MemoryType, TaskRunStatus, TaskStatus
+from app.models.common import AgentStatus, EventType, MemoryType, TaskRunStatus, TaskStatus, TaskType
 from app.models.memory import Memory
 from app.models.task import Task
 from app.models.task_event import TaskEvent
@@ -21,6 +21,7 @@ from app.schemas.worker import WorkerCycleResponse, WorkerExecutionPayload
 from app.services.execution import ExecutionAdapter, ExecutionResult
 from app.services.memory import MemoryService
 from app.services.project_workspace import ProjectWorkspaceService
+from app.services.project_plans import ProjectPlanService
 from app.services.projects import ProjectService
 from app.services.prompting import get_role_profile, build_prompt
 from app.services.workflow import WorkflowService
@@ -84,6 +85,7 @@ class WorkerService:
                     memories=self._retrieved_memories(task=task),
                     repo_root=self._settings.resolved_codex_workdir,
                     project_workspace=self._workspace_service().codex_project_directory(task.project_id),
+                    plan_context=self._plan_service().plan_context_for_task(task),
                 )
                 run = TaskRun(
                     task_id=task.id,
@@ -132,6 +134,9 @@ class WorkerService:
     def _project_service(self) -> ProjectService:
         return ProjectService(db=self._db, settings=self._settings)
 
+    def _plan_service(self) -> ProjectPlanService:
+        return ProjectPlanService(db=self._db, project_service=self._project_service())
+
     def _execute_prompt(self, *, prompt: str, workdir: Path | None) -> ExecutionResult:
         try:
             return self._execution_adapter.run(prompt=prompt, workdir=workdir)
@@ -164,7 +169,12 @@ class WorkerService:
         artifact_paths: list[str] = []
         if payload is not None:
             artifact_paths = self._validated_artifact_paths(task=task, payload=payload)
-            if task.project_id and final_status == TaskRunStatus.SUCCEEDED and not artifact_paths:
+            if (
+                task.type != TaskType.IDEA
+                and task.project_id
+                and final_status == TaskRunStatus.SUCCEEDED
+                and not artifact_paths
+            ):
                 final_status = TaskRunStatus.FAILED
                 artifact_error = (
                     f"Project task completed without creating files in projects/{task.project_id}. "
@@ -210,34 +220,44 @@ class WorkerService:
                     )
                 )
 
-            for follow_up in payload.follow_up_tasks:
-                project_id = self._project_service().require_project(
-                    follow_up.project_id or task.project_id
-                )
-                self._workspace_service().ensure_project_directory(project_id)
-                next_task = Task(
-                    title=follow_up.title,
-                    description=follow_up.description,
-                    type=follow_up.type,
-                    project_id=project_id,
-                )
-                self._db.add(next_task)
-                self._db.flush()
-                follow_up_task_ids.append(next_task.id)
-                self._db.add(
-                    TaskEvent(
-                        task_id=next_task.id,
-                        agent_id=agent.id,
-                        event_type=EventType.TASK_CREATED,
-                        payload={
-                            "title": next_task.title,
-                            "type": next_task.type.value,
-                            "source_task_id": str(task.id),
-                        },
+            if task.type == TaskType.IDEA:
+                self._plan_service().replace_plan_from_idea_task(task=task, payload=payload)
+            elif payload.follow_up_tasks:
+                if task.plan_id is not None:
+                    follow_up_task_ids = self._plan_service().create_follow_up_tasks(
+                        source_task=task,
+                        follow_ups=payload.follow_up_tasks,
                     )
-                )
+                else:
+                    for follow_up in payload.follow_up_tasks:
+                        project_id = self._project_service().require_project(
+                            follow_up.project_id or task.project_id
+                        )
+                        self._workspace_service().ensure_project_directory(project_id)
+                        next_task = Task(
+                            title=follow_up.title,
+                            description=follow_up.description,
+                            type=follow_up.type,
+                            project_id=project_id,
+                        )
+                        self._db.add(next_task)
+                        self._db.flush()
+                        follow_up_task_ids.append(next_task.id)
+                        self._db.add(
+                            TaskEvent(
+                                task_id=next_task.id,
+                                agent_id=agent.id,
+                                event_type=EventType.TASK_CREATED,
+                                payload={
+                                    "title": next_task.title,
+                                    "type": next_task.type.value,
+                                    "source_task_id": str(task.id),
+                                },
+                            )
+                        )
 
         run.created_follow_up_tasks = len(follow_up_task_ids)
+        self._plan_service().sync_task_status(task=task)
         self._db.add(
             TaskEvent(
                 task_id=task.id,
@@ -271,6 +291,8 @@ class WorkerService:
         task: Task,
         payload: WorkerExecutionPayload,
     ) -> list[str]:
+        if task.type == TaskType.IDEA:
+            return []
         if task.project_id is None:
             return payload.artifact_paths
 

@@ -25,6 +25,7 @@ class TaskStatus(str, enum.Enum):
 
 
 class TaskType(str, enum.Enum):
+    IDEA = "idea"
     FEATURE = "feature"
     BUGFIX = "bugfix"
     RESEARCH = "research"
@@ -33,6 +34,7 @@ class TaskType(str, enum.Enum):
 
 
 class AgentRole(str, enum.Enum):
+    PLANNER = "planner"
     DESIGNER = "designer"
     ARCHITECT = "architect"
     DEVELOPER = "developer"
@@ -60,6 +62,7 @@ class EventType(str, enum.Enum):
     TASK_UPDATED = "task_updated"
     AGENT_CREATED = "agent_created"
     MEMORY_CREATED = "memory_created"
+    PLAN_UPDATED = "plan_updated"
 
 
 class TaskRunStatus(str, enum.Enum):
@@ -90,6 +93,22 @@ class SelfImprovementTriggerMode(str, enum.Enum):
     MANUAL = "manual"
     SCHEDULED = "scheduled"
     SEEDED = "seeded"
+
+
+class ProjectPlanStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PENDING_APPROVAL = "pending_approval"
+    CHANGES_REQUESTED = "changes_requested"
+    APPROVED = "approved"
+    COMPLETED = "completed"
+
+
+class ProjectPlanTaskStatus(str, enum.Enum):
+    PROPOSED = "proposed"
+    QUEUED = "queued"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 def enum_values(enum_cls: type[enum.Enum]) -> list[str]:

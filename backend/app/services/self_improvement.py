@@ -136,6 +136,7 @@ class SelfImprovementService:
 
         if self._count(Agent) == 0:
             for name, role in [
+                ("planner-1", AgentRole.PLANNER),
                 ("arch-1", AgentRole.ARCHITECT),
                 ("dev-1", AgentRole.DEVELOPER),
                 ("tester-1", AgentRole.TESTER),

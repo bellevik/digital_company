@@ -69,6 +69,31 @@ def test_delete_project_rejects_projects_with_tasks(client: TestClient) -> None:
     assert delete_response.json()["detail"] == "project_has_tasks"
 
 
+def test_pitch_idea_creates_draft_plan_and_idea_task(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+
+    response = client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "AI-assisted calculator",
+            "idea_description": "Pitch a calculator product before implementation starts.",
+        },
+    )
+
+    assert response.status_code == 201
+    plan = response.json()
+    assert plan["project_id"] == "futurecalc"
+    assert plan["status"] == "draft"
+    assert plan["planning_task_id"] is not None
+
+    tasks = client.get("/api/v1/tasks").json()
+    assert tasks[0]["type"] == "idea"
+    assert tasks[0]["plan_id"] == plan["id"]
+
+
 def test_create_and_list_tasks(client: TestClient, projects_root) -> None:
     client.post(
         "/api/v1/projects",

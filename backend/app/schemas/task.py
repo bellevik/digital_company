@@ -37,6 +37,8 @@ class TaskRead(BaseModel):
     status: TaskStatus
     assigned_agent_id: uuid.UUID | None
     project_id: str | None
+    plan_id: uuid.UUID | None
+    plan_item_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
@@ -51,4 +53,3 @@ class TaskEventRead(BaseModel):
     event_type: EventType
     payload: dict
     created_at: datetime
-

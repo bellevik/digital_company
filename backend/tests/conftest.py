@@ -18,6 +18,7 @@ from app.models import (
     embedding,
     memory,
     project,
+    project_plan,
     review_decision,
     self_improvement_run,
     task,

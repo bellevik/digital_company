@@ -6,8 +6,9 @@ type ApiState = {
 };
 
 type TaskStatus = "todo" | "in_progress" | "done" | "failed";
-type TaskType = "feature" | "bugfix" | "research" | "review" | "ops";
+type TaskType = "idea" | "feature" | "bugfix" | "research" | "review" | "ops";
 type AgentRole =
+  | "planner"
   | "designer"
   | "architect"
   | "developer"
@@ -24,6 +25,13 @@ type ReviewDecisionType = "approved" | "changes_requested";
 type MemoryType = "conversation" | "decision" | "task_result" | "note";
 type TaskRunStatus = "running" | "succeeded" | "failed";
 type SearchStrategy = "keyword" | "vector" | "hybrid";
+type PlanStatus =
+  | "draft"
+  | "pending_approval"
+  | "changes_requested"
+  | "approved"
+  | "completed";
+type PlanTaskStatus = "proposed" | "queued" | "done" | "failed" | "cancelled";
 
 type Project = {
   id: string;
@@ -31,6 +39,39 @@ type Project = {
   description: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type ProjectPlanTask = {
+  id: string;
+  parent_plan_task_id: string | null;
+  source_task_id: string | null;
+  created_task_id: string | null;
+  sequence: number;
+  title: string;
+  description: string;
+  type: Exclude<TaskType, "idea"> | TaskType;
+  status: PlanTaskStatus;
+  spawn_budget: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type ProjectPlan = {
+  id: string;
+  project_id: string;
+  planning_task_id: string | null;
+  idea_title: string;
+  idea_description: string;
+  planner_summary: string | null;
+  status: PlanStatus;
+  feedback: string | null;
+  max_total_tasks: number;
+  created_task_count: number;
+  approved_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  items: ProjectPlanTask[];
 };
 
 type Task = {
@@ -222,6 +263,12 @@ const defaultTaskDraft = {
   projectId: "",
 };
 
+const defaultIdeaPitchDraft = {
+  title: "",
+  description: "",
+  feedback: "",
+};
+
 const defaultProjectDraft = {
   id: "",
   name: "",
@@ -249,6 +296,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectPlans, setProjectPlans] = useState<ProjectPlan[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentCatalog, setAgentCatalog] = useState<AgentCatalog>({
@@ -267,6 +315,7 @@ export default function App() {
   const [selectedTaskEvents, setSelectedTaskEvents] = useState<TaskEvent[]>([]);
   const [taskDraft, setTaskDraft] = useState(defaultTaskDraft);
   const [projectDraft, setProjectDraft] = useState(defaultProjectDraft);
+  const [ideaPitchDraft, setIdeaPitchDraft] = useState(defaultIdeaPitchDraft);
   const [agentDraft, setAgentDraft] = useState(defaultAgentDraft);
   const [reviewDraft, setReviewDraft] = useState(defaultReviewDraft);
   const [memoryQuery, setMemoryQuery] = useState("task locking");
@@ -278,6 +327,8 @@ export default function App() {
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
   const [isDeletingProjectId, setIsDeletingProjectId] = useState<string | null>(null);
+  const [isPitchingIdea, setIsPitchingIdea] = useState(false);
+  const [isSubmittingPlanDecision, setIsSubmittingPlanDecision] = useState(false);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
   const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
@@ -293,6 +344,7 @@ export default function App() {
           catalogResponse,
           tasksResponse,
           projectsResponse,
+          projectPlansResponse,
           agentsResponse,
           taskRunsResponse,
           workflowsResponse,
@@ -303,6 +355,7 @@ export default function App() {
           apiGet<AgentCatalog>("/api/v1/agents/catalog"),
           apiGet<Task[]>("/api/v1/tasks"),
           apiGet<Project[]>("/api/v1/projects"),
+          apiGet<ProjectPlan[]>("/api/v1/project-plans"),
           apiGet<Agent[]>("/api/v1/agents"),
           apiGet<TaskRun[]>("/api/v1/task-runs"),
           apiGet<Workflow[]>("/api/v1/workflows"),
@@ -318,6 +371,7 @@ export default function App() {
         setAgentCatalog(catalogResponse);
         setTasks(tasksResponse);
         setProjects(projectsResponse);
+        setProjectPlans(projectPlansResponse);
         setAgents(agentsResponse);
         setTaskRuns(taskRunsResponse);
         setWorkflows(workflowsResponse);
@@ -403,6 +457,10 @@ export default function App() {
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const selectedProjectPlans = selectedProject
+    ? projectPlans.filter((plan) => plan.project_id === selectedProject.id)
+    : [];
+  const selectedProjectPlan = selectedProjectPlans[0] ?? null;
   const roleTemplates = agentCatalog.templates.filter(
     (template) => template.role === agentDraft.role,
   );
@@ -426,6 +484,7 @@ export default function App() {
       apiGet<AgentCatalog>("/api/v1/agents/catalog"),
       apiGet<Task[]>("/api/v1/tasks"),
       apiGet<Project[]>("/api/v1/projects"),
+      apiGet<ProjectPlan[]>("/api/v1/project-plans"),
       apiGet<Agent[]>("/api/v1/agents"),
       apiGet<TaskRun[]>("/api/v1/task-runs"),
       apiGet<Workflow[]>("/api/v1/workflows"),
@@ -436,12 +495,13 @@ export default function App() {
     setAgentCatalog(payload[0]);
     setTasks(payload[1]);
     setProjects(payload[2]);
-    setAgents(payload[3]);
-    setTaskRuns(payload[4]);
-    setWorkflows(payload[5]);
-    setMemories(payload[6]);
-    setSystemSummary(payload[7]);
-    setSelfImprovementRuns(payload[8]);
+    setProjectPlans(payload[3]);
+    setAgents(payload[4]);
+    setTaskRuns(payload[5]);
+    setWorkflows(payload[6]);
+    setMemories(payload[7]);
+    setSystemSummary(payload[8]);
+    setSelfImprovementRuns(payload[9]);
     setSelectedProjectId((current) =>
       current && payload[2].some((project) => project.id === current)
         ? current
@@ -516,6 +576,71 @@ export default function App() {
       );
     } finally {
       setIsSubmittingTask(false);
+    }
+  }
+
+  async function handlePitchIdea(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedProject) {
+      return;
+    }
+
+    setIsPitchingIdea(true);
+    try {
+      await apiPost<ProjectPlan>(
+        `/api/v1/project-plans/projects/${selectedProject.id}/pitch`,
+        {
+          idea_title: ideaPitchDraft.title.trim(),
+          idea_description: ideaPitchDraft.description.trim(),
+        },
+      );
+      setIdeaPitchDraft(defaultIdeaPitchDraft);
+      await refreshDashboard();
+      pushToast(setToast, "success", "Idea pitched. Run a planner agent to generate the plan.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to pitch idea.",
+      );
+    } finally {
+      setIsPitchingIdea(false);
+    }
+  }
+
+  async function handleApprovePlan(planId: string) {
+    setIsSubmittingPlanDecision(true);
+    try {
+      await apiPost<ProjectPlan>(`/api/v1/project-plans/${planId}/approve`, {});
+      await refreshDashboard();
+      pushToast(setToast, "success", "Plan approved and queued onto the board.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to approve plan.",
+      );
+    } finally {
+      setIsSubmittingPlanDecision(false);
+    }
+  }
+
+  async function handleRequestPlanChanges(planId: string) {
+    setIsSubmittingPlanDecision(true);
+    try {
+      await apiPost<ProjectPlan>(`/api/v1/project-plans/${planId}/request-changes`, {
+        feedback: ideaPitchDraft.feedback.trim(),
+      });
+      await refreshDashboard();
+      pushToast(setToast, "success", "Plan sent back for changes.");
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to request plan changes.",
+      );
+    } finally {
+      setIsSubmittingPlanDecision(false);
     }
   }
 
@@ -1272,6 +1397,7 @@ export default function App() {
                     selectedProject?.id === project.id ? "entity-card-active" : ""
                   }`}
                   key={project.id}
+                  onClick={() => setSelectedProjectId(project.id)}
                 >
                   <div className="entity-meta">
                     <div className="task-card-topline-left">
@@ -1288,7 +1414,10 @@ export default function App() {
                         aria-label={`Delete ${project.name}`}
                         className="task-card-delete"
                         disabled={isDeletingProjectId !== null}
-                        onClick={() => void handleDeleteProject(project)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteProject(project);
+                        }}
                         type="button"
                       >
                         ×
@@ -1310,6 +1439,141 @@ export default function App() {
                 </article>
               ))}
             </div>
+          </Panel>
+
+          <Panel
+            title="Project Planning"
+            subtitle="Pitch an idea, let a planner draft the plan, then approve it onto the board"
+          >
+            {selectedProject ? (
+              <div className="form-stack">
+                <div className="workflow-summary">
+                  <p>
+                    <strong>Selected project:</strong> {selectedProject.name} ({selectedProject.id})
+                  </p>
+                  <p>
+                    <strong>Latest plan:</strong>{" "}
+                    {selectedProjectPlan ? selectedProjectPlan.status : "none yet"}
+                  </p>
+                </div>
+                <form className="form-stack" onSubmit={handlePitchIdea}>
+                  <label>
+                    Idea title
+                    <input
+                      required
+                      placeholder="Launch a futuristic calculator product"
+                      value={ideaPitchDraft.title}
+                      onChange={(event) =>
+                        setIdeaPitchDraft((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Idea description
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder="Describe the idea, goal, and why it matters before execution starts."
+                      value={ideaPitchDraft.description}
+                      onChange={(event) =>
+                        setIdeaPitchDraft((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <button className="primary-button" disabled={isPitchingIdea} type="submit">
+                    {isPitchingIdea ? "Pitching..." : "Pitch Idea"}
+                  </button>
+                </form>
+
+                {selectedProjectPlan ? (
+                  <article className="entity-card">
+                    <div className="entity-meta">
+                      <div>
+                        <h4>{selectedProjectPlan.idea_title}</h4>
+                        <p>{selectedProjectPlan.status}</p>
+                      </div>
+                      <span className={`status-pill status-${mapPlanStatus(selectedProjectPlan.status)}`}>
+                        {selectedProjectPlan.created_task_count}/{selectedProjectPlan.max_total_tasks}
+                      </span>
+                    </div>
+                    <p>{selectedProjectPlan.idea_description}</p>
+                    <p className="muted">
+                      {selectedProjectPlan.planner_summary ?? "No planner summary yet. Run a planner agent on the idea task."}
+                    </p>
+                    {selectedProjectPlan.feedback ? (
+                      <p className="muted">latest feedback: {selectedProjectPlan.feedback}</p>
+                    ) : null}
+                    <div className="entity-list">
+                      {selectedProjectPlan.items.map((item) => (
+                        <article className="activity-item" key={item.id}>
+                          <div className="entity-meta">
+                            <div>
+                              <h4>{item.title}</h4>
+                              <p>
+                                {item.type} • spawn budget {item.spawn_budget}
+                              </p>
+                            </div>
+                            <span className={`status-pill status-${mapPlanTaskStatus(item.status)}`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          <p>{item.description}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <label>
+                      Feedback for changes
+                      <textarea
+                        rows={3}
+                        placeholder="Optional: Tell the planner what to change before approving."
+                        value={ideaPitchDraft.feedback}
+                        onChange={(event) =>
+                          setIdeaPitchDraft((current) => ({
+                            ...current,
+                            feedback: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <div className="task-actions">
+                      <button
+                        className="primary-button"
+                        disabled={
+                          isSubmittingPlanDecision ||
+                          !["pending_approval", "changes_requested"].includes(selectedProjectPlan.status)
+                        }
+                        onClick={() => void handleApprovePlan(selectedProjectPlan.id)}
+                        type="button"
+                      >
+                        Approve Plan
+                      </button>
+                      <button
+                        className="secondary-button"
+                        disabled={
+                          isSubmittingPlanDecision ||
+                          !selectedProjectPlan.items.length ||
+                          !ideaPitchDraft.feedback.trim()
+                        }
+                        onClick={() => void handleRequestPlanChanges(selectedProjectPlan.id)}
+                        type="button"
+                      >
+                        Request Changes
+                      </button>
+                    </div>
+                  </article>
+                ) : (
+                  <p className="muted">Pitch an idea for the selected project to start a bounded plan.</p>
+                )}
+              </div>
+            ) : (
+              <p className="muted">Create or select a project first.</p>
+            )}
           </Panel>
 
           <Panel title="Agents" subtitle="Create richer agents, attach SKILL.md guides, and run cycles">
@@ -1340,6 +1604,7 @@ export default function App() {
                   }
                 >
                   {[
+                    "planner",
                     "designer",
                     "architect",
                     "developer",
@@ -1750,6 +2015,29 @@ function mapRunStatus(status: TaskRunStatus) {
     return "done";
   }
   return "failed";
+}
+
+function mapPlanStatus(status: PlanStatus) {
+  if (status === "approved") {
+    return "in_progress";
+  }
+  if (status === "completed") {
+    return "done";
+  }
+  if (status === "changes_requested") {
+    return "failed";
+  }
+  return "todo";
+}
+
+function mapPlanTaskStatus(status: PlanTaskStatus) {
+  if (status === "done") {
+    return "done";
+  }
+  if (status === "failed" || status === "cancelled") {
+    return "failed";
+  }
+  return "todo";
 }
 
 function mapAgentStatus(status: AgentStatus) {

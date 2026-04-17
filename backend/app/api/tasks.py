@@ -28,6 +28,7 @@ from app.schemas.task import (
 from app.services.projects import ProjectService
 from app.schemas.workflow import ReviewDecisionCreate, SubmitForReviewRequest, TaskWorkflowRead
 from app.services.project_workspace import ProjectWorkspaceService
+from app.services.project_plans import ProjectPlanService
 from app.services.workflow import WorkflowService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -88,6 +89,7 @@ def update_task(
     settings = get_settings()
     workspace_service = ProjectWorkspaceService(settings=settings)
     project_service = ProjectService(db=db, settings=settings)
+    plan_service = ProjectPlanService(db=db, project_service=project_service)
     previous_agent = task.assigned_agent
     update_data = payload.model_dump(exclude_unset=True)
     if "project_id" in update_data:
@@ -122,6 +124,7 @@ def update_task(
             payload=update_data,
         )
     )
+    plan_service.sync_task_status(task=task)
     db.commit()
     db.refresh(task)
     return task
@@ -140,6 +143,11 @@ def retry_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency))
 
     previous_agent = task.assigned_agent
     previous_status = task.status
+    settings = get_settings()
+    plan_service = ProjectPlanService(
+        db=db,
+        project_service=ProjectService(db=db, settings=settings),
+    )
     task.status = TaskStatus.TODO
     task.completed_at = None
     task.assigned_agent_id = None
@@ -160,6 +168,7 @@ def retry_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency))
             },
         )
     )
+    plan_service.sync_task_status(task=task)
     db.commit()
     db.refresh(task)
     return task
@@ -170,6 +179,11 @@ def delete_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency)
     task = db.get(Task, task_id)
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    settings = get_settings()
+    plan_service = ProjectPlanService(
+        db=db,
+        project_service=ProjectService(db=db, settings=settings),
+    )
 
     agent_query = select(Agent).where(Agent.current_task_id == task.id)
     if task.assigned_agent_id is not None:
@@ -196,6 +210,7 @@ def delete_task(task_id: uuid.UUID, db: Session = Depends(db_session_dependency)
     for task_event in db.scalars(select(TaskEvent).where(TaskEvent.task_id == task.id)).all():
         db.delete(task_event)
 
+    plan_service.cancel_task_link(task=task)
     db.delete(task)
     db.commit()
     return {"status": "deleted"}
@@ -262,3 +277,8 @@ def record_review_decision(
         return WorkflowService(db=db).record_review_decision(task_id=task_id, payload=payload)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+    settings = get_settings()
+    plan_service = ProjectPlanService(
+        db=db,
+        project_service=ProjectService(db=db, settings=settings),
+    )

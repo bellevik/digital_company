@@ -15,3 +15,8 @@ class Project(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="project")
+    plans: Mapped[list["ProjectPlan"]] = relationship(
+        "ProjectPlan",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )

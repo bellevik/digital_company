@@ -114,6 +114,112 @@ def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 
 
+def test_planner_run_creates_pending_plan_and_approval_queues_tasks(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    plan = client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Pitch futuristic calculator",
+            "idea_description": "Turn the idea into a bounded plan before building.",
+        },
+    ).json()
+    adapter = FakeExecutionAdapter(
+        stdout=(
+            '{"summary":"Planned the calculator project.",'
+            '"plan_summary":"Ship the calculator in two bounded steps.",'
+            '"max_total_tasks":3,'
+            '"planned_tasks":['
+            '{"title":"Design calculator experience","description":"Define the UX direction.","type":"research","spawn_budget":0},'
+            '{"title":"Build calculator shell","description":"Implement the initial app shell.","type":"feature","spawn_budget":1}'
+            ']}'
+        )
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    planner = client.post("/api/v1/agents", json={"name": "planner-idea", "role": "planner"}).json()
+
+    work_response = client.post(f"/api/v1/agents/{planner['id']}/work")
+
+    assert work_response.status_code == 200
+    plans = client.get("/api/v1/project-plans", params={"project_id": "futurecalc"}).json()
+    latest_plan = next(item for item in plans if item["id"] == plan["id"])
+    assert latest_plan["status"] == "pending_approval"
+    assert len(latest_plan["items"]) == 2
+
+    approve_response = client.post(f"/api/v1/project-plans/{plan['id']}/approve")
+    assert approve_response.status_code == 200
+    approved_plan = approve_response.json()
+    assert approved_plan["status"] == "approved"
+    assert approved_plan["created_task_count"] == 2
+
+    tasks = client.get("/api/v1/tasks").json()
+    queued = [task for task in tasks if task["plan_id"] == plan["id"] and task["type"] != "idea"]
+    assert len(queued) == 2
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_plan_bounded_followups_respect_budget(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    plan = client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Pitch futuristic calculator",
+            "idea_description": "Bound the initial build plan.",
+        },
+    ).json()
+    planner_adapter = FakeExecutionAdapter(
+        stdout=(
+            '{"summary":"Planned the calculator project.",'
+            '"plan_summary":"Ship the calculator in two bounded steps.",'
+            '"max_total_tasks":2,'
+            '"planned_tasks":['
+            '{"title":"Build calculator shell","description":"Implement the initial app shell.","type":"feature","spawn_budget":1}'
+            ']}'
+        )
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: planner_adapter
+    planner = client.post("/api/v1/agents", json={"name": "planner-cap", "role": "planner"}).json()
+    client.post(f"/api/v1/agents/{planner['id']}/work")
+    client.post(f"/api/v1/project-plans/{plan['id']}/approve")
+
+    developer_adapter = FakeExecutionAdapter(
+        stdout=(
+            '{"summary":"Implemented the calculator shell.",'
+            '"memory_summary":"calculator shell",'
+            '"memory_content":"Built the first shell.",'
+            '"artifact_paths":["app.md"],'
+            '"follow_up_tasks":['
+            '{"title":"Add history","description":"Implement calculation history.","type":"feature","project_id":"futurecalc"},'
+            '{"title":"Add themes","description":"Implement theme support.","type":"feature","project_id":"futurecalc"}'
+            ']}'
+        ),
+        files_to_create=["app.md"],
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: developer_adapter
+    developer = client.post("/api/v1/agents", json={"name": "dev-cap", "role": "developer"}).json()
+
+    work_response = client.post(f"/api/v1/agents/{developer['id']}/work")
+
+    assert work_response.status_code == 200
+    payload = work_response.json()
+    assert payload["outcome"] == "completed"
+    assert len(payload["follow_up_task_ids"]) == 1
+
+    approved_plan = next(
+        item for item in client.get("/api/v1/project-plans", params={"project_id": "futurecalc"}).json()
+        if item["id"] == plan["id"]
+    )
+    assert approved_plan["created_task_count"] == 2
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
 def test_agent_catalog_and_create_agent_with_template_and_skills(client: TestClient) -> None:
     catalog_response = client.get("/api/v1/agents/catalog")
     assert catalog_response.status_code == 200

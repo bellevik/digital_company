@@ -4,6 +4,7 @@ from app.api.agents import router as agents_router
 from app.api.memories import router as memories_router
 from app.api.operations import router as operations_router
 from app.api.projects import router as projects_router
+from app.api.project_plans import router as project_plans_router
 from app.api.system import router as system_router
 from app.api.task_runs import router as task_runs_router
 from app.api.tasks import router as tasks_router
@@ -14,6 +15,7 @@ router = APIRouter()
 router.include_router(system_router)
 router.include_router(operations_router)
 router.include_router(projects_router)
+router.include_router(project_plans_router)
 router.include_router(tasks_router)
 router.include_router(agents_router)
 router.include_router(memories_router)

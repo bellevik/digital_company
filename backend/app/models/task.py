@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Uuid
 
 from app.db.base import Base
 from app.models.common import TaskStatus, TaskType, TimestampMixin, enum_values, uuid_primary_key
@@ -38,6 +39,8 @@ class Task(TimestampMixin, Base):
         ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
     )
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), nullable=True)
+    plan_item_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     assigned_agent: Mapped["Agent | None"] = relationship(
