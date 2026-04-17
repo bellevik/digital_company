@@ -94,6 +94,16 @@ def test_task_routing_prefers_specialized_roles() -> None:
         description="Lock the feature envelope and explicit exclusions.",
         task_type=TaskType.RESEARCH,
     ) == AgentRole.ARCHITECT
+    assert preferred_role_for_task(
+        title="Implement calculator logic and input handling",
+        description="Wire the standard calculation engine to UI controls and keyboard shortcuts.",
+        task_type=TaskType.FEATURE,
+    ) == AgentRole.DEVELOPER
+    assert preferred_role_for_task(
+        title="Layer in high-impact visual effects and animations",
+        description="Add the over-the-top presentation layer without breaking usability.",
+        task_type=TaskType.FEATURE,
+    ) == AgentRole.DEVELOPER
 
 
 def test_run_agent_once_completes_task_and_creates_follow_ups(client: TestClient, projects_root) -> None:

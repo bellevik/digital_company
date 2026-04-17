@@ -11,12 +11,7 @@ _VISUAL_DESIGN_HINTS = (
     "animation",
     "typography",
     "layout",
-    "ui",
-    "ux",
-    "interaction",
-    "interface",
     "look and feel",
-    "history drawer",
 )
 _ARCHITECT_HINTS = (
     "scope",
@@ -46,10 +41,25 @@ _RELEASE_HINTS = (
     "sign-off",
     "scope lock",
 )
+_IMPLEMENTATION_VERBS = (
+    "implement",
+    "build",
+    "layer",
+    "wire",
+    "ship",
+    "create",
+)
+_PLANNING_VERBS = (
+    "define",
+    "design",
+    "establish",
+    "lock",
+)
 
 
 def preferred_role_for_task(*, title: str, description: str, task_type: TaskType) -> AgentRole:
     haystack = f"{title}\n{description}".lower()
+    title_text = title.lower()
 
     if task_type == TaskType.IDEA:
         return AgentRole.PLANNER
@@ -70,7 +80,12 @@ def preferred_role_for_task(*, title: str, description: str, task_type: TaskType
             return AgentRole.DESIGNER
         return AgentRole.ARCHITECT
     if task_type == TaskType.FEATURE:
-        if any(_contains_term(haystack, term) for term in _VISUAL_DESIGN_HINTS):
+        if any(_contains_term(title_text, verb) for verb in _IMPLEMENTATION_VERBS):
+            return AgentRole.DEVELOPER
+        if (
+            any(_contains_term(title_text, verb) for verb in _PLANNING_VERBS)
+            and any(_contains_term(haystack, term) for term in _VISUAL_DESIGN_HINTS)
+        ):
             return AgentRole.DESIGNER
         if any(_contains_term(haystack, term) for term in _ARCHITECT_HINTS):
             return AgentRole.ARCHITECT
