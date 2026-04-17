@@ -141,7 +141,9 @@ def _keyword_score(query: str, summary: str, content: str) -> float:
 
 
 def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
-    if not left or not right or len(left) != len(right):
+    if left is None or right is None:
+        return 0.0
+    if len(left) == 0 or len(right) == 0 or len(left) != len(right):
         return 0.0
 
     dot_product = sum(a * b for a, b in zip(left, right))
