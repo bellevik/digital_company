@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import db_session_dependency
 from app.config import get_settings
-from app.schemas.self_improvement import SeedDemoResponse, SelfImprovementRunRead, SystemSummary
+from app.schemas.self_improvement import (
+    SeedDemoResponse,
+    SeedStartupTeamResponse,
+    SelfImprovementRunRead,
+    SystemSummary,
+)
 from app.services.self_improvement import SelfImprovementService
 from app.services.system_runtime import scheduler_runtime
 from app.models.common import SelfImprovementTriggerMode
@@ -41,3 +46,8 @@ def trigger_self_improvement_run(
 @router.post("/seed-demo", response_model=SeedDemoResponse)
 def seed_demo_data(db: Session = Depends(db_session_dependency)) -> SeedDemoResponse:
     return SelfImprovementService(db=db, settings=get_settings()).seed_demo()
+
+
+@router.post("/seed-startup-team", response_model=SeedStartupTeamResponse)
+def seed_startup_team(db: Session = Depends(db_session_dependency)) -> SeedStartupTeamResponse:
+    return SelfImprovementService(db=db, settings=get_settings()).seed_startup_team()

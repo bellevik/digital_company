@@ -256,6 +256,13 @@ type SeedDemoResponse = {
   message: string;
 };
 
+type SeedStartupTeamResponse = {
+  created_agents: number;
+  existing_agents: number;
+  created_names: string[];
+  message: string;
+};
+
 type Toast = {
   tone: "info" | "success" | "error";
   message: string;
@@ -332,6 +339,7 @@ export default function App() {
   const [isSubmittingProject, setIsSubmittingProject] = useState(false);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
+  const [isSeedingStartupTeam, setIsSeedingStartupTeam] = useState(false);
   const [isRunningAllAgents, setIsRunningAllAgents] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
@@ -780,6 +788,27 @@ export default function App() {
       );
     } finally {
       setIsRunningAllAgents(false);
+    }
+  }
+
+  async function handleSeedStartupTeam() {
+    setIsSeedingStartupTeam(true);
+    try {
+      const payload = await apiPost<SeedStartupTeamResponse>("/api/v1/operations/seed-startup-team", {});
+      await refreshDashboard();
+      pushToast(
+        setToast,
+        "success",
+        `${payload.message} ${payload.created_agents} created, ${payload.existing_agents} already present.`,
+      );
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to seed startup team.",
+      );
+    } finally {
+      setIsSeedingStartupTeam(false);
     }
   }
 
@@ -1625,14 +1654,24 @@ export default function App() {
             title="Agents"
             subtitle="Create richer agents, attach SKILL.md guides, and run cycles"
             actions={
-              <button
-                className="secondary-button"
-                disabled={isRunningAllAgents || isRunningAgentId !== null || agents.length === 0}
-                onClick={() => void handleRunAllAgents()}
-                type="button"
-              >
-                {isRunningAllAgents ? "Running All..." : "Run All Agents"}
-              </button>
+              <div className="task-actions">
+                <button
+                  className="secondary-button"
+                  disabled={isSeedingStartupTeam || isRunningAllAgents || isRunningAgentId !== null}
+                  onClick={() => void handleSeedStartupTeam()}
+                  type="button"
+                >
+                  {isSeedingStartupTeam ? "Seeding Team..." : "Seed Startup Team"}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={isRunningAllAgents || isRunningAgentId !== null || agents.length === 0}
+                  onClick={() => void handleRunAllAgents()}
+                  type="button"
+                >
+                  {isRunningAllAgents ? "Running All..." : "Run All Agents"}
+                </button>
+              </div>
             }
           >
             <form className="form-stack" onSubmit={handleCreateAgent}>

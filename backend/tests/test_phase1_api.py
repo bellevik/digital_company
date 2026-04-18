@@ -31,6 +31,38 @@ def test_create_and_list_projects(client: TestClient, projects_root) -> None:
     assert len(list_response.json()) == 1
 
 
+def test_seed_startup_team_creates_expected_roster_and_is_idempotent(client: TestClient) -> None:
+    first = client.post("/api/v1/operations/seed-startup-team")
+
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["created_agents"] == 11
+    assert first_payload["existing_agents"] == 0
+
+    agents = client.get("/api/v1/agents").json()
+    assert len(agents) == 11
+    assert {agent["name"] for agent in agents} == {
+        "RoadmapPlanner",
+        "DesignLead",
+        "InterfaceSystems",
+        "PlatformArchitect",
+        "IntegrationGuardian",
+        "SeniorBuilder",
+        "RefactorSpecialist",
+        "PrototypeSprinter",
+        "RegressionHunter",
+        "StrictReviewer",
+        "ReleaseGate",
+    }
+
+    second = client.post("/api/v1/operations/seed-startup-team")
+
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["created_agents"] == 0
+    assert second_payload["existing_agents"] == 11
+
+
 def test_delete_project_removes_empty_workspace(client: TestClient, projects_root) -> None:
     client.post(
         "/api/v1/projects",

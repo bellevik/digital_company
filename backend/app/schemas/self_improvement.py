@@ -48,3 +48,10 @@ class SeedDemoResponse(BaseModel):
     created_tasks: int
     created_memories: int
     message: str
+
+
+class SeedStartupTeamResponse(BaseModel):
+    created_agents: int
+    existing_agents: int
+    created_names: list[str]
+    message: str

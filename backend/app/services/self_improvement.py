@@ -22,9 +22,9 @@ from app.models.self_improvement_run import SelfImprovementRun
 from app.models.task import Task
 from app.models.task_run import TaskRun
 from app.models.task_workflow import TaskWorkflow
-from app.schemas.self_improvement import SeedDemoResponse, SystemSummary
+from app.schemas.self_improvement import SeedDemoResponse, SeedStartupTeamResponse, SystemSummary
 from app.services.memory import MemoryService
-from app.services.agent_catalog import default_template_id_for_role
+from app.services.agent_catalog import resolve_agent_skills, resolve_agent_template
 from app.services.project_workspace import ProjectWorkspaceService
 from app.services.projects import ProjectService
 
@@ -205,6 +205,43 @@ class SelfImprovementService:
             message="Demo data seeded.",
         )
 
+    def seed_startup_team(self) -> SeedStartupTeamResponse:
+        created_names: list[str] = []
+        existing_agents = 0
+
+        for blueprint in _startup_team_blueprint():
+            existing = self._db.scalar(select(Agent).where(Agent.name == blueprint["name"]))
+            if existing is not None:
+                existing_agents += 1
+                continue
+
+            template = resolve_agent_template(
+                role=blueprint["role"],
+                template_id=blueprint["template_id"],
+            )
+            skills = resolve_agent_skills(
+                blueprint["skill_ids"],
+                repo_root=self._settings.repo_root,
+            )
+            self._db.add(
+                Agent(
+                    name=blueprint["name"],
+                    role=blueprint["role"],
+                    template_id=template.id,
+                    instructions=blueprint["instructions"],
+                    skill_ids=[skill.id for skill in skills],
+                )
+            )
+            created_names.append(blueprint["name"])
+
+        self._db.commit()
+        return SeedStartupTeamResponse(
+            created_agents=len(created_names),
+            existing_agents=existing_agents,
+            created_names=created_names,
+            message="Startup team seeded.",
+        )
+
     def _collect_suggestions(self) -> list[dict]:
         suggestions: list[dict] = []
 
@@ -273,3 +310,85 @@ class SelfImprovementService:
 
     def _count(self, model) -> int:
         return self._db.scalar(select(func.count()).select_from(model)) or 0
+
+
+def _startup_team_blueprint() -> list[dict]:
+    return [
+        {
+            "name": "RoadmapPlanner",
+            "role": AgentRole.PLANNER,
+            "template_id": "planner_delivery_strategist",
+            "skill_ids": ["implementation_planning", "documentation_handoff"],
+            "instructions": "Own bounded planning passes and keep total scope finite.",
+        },
+        {
+            "name": "DesignLead",
+            "role": AgentRole.DESIGNER,
+            "template_id": "designer_product_strategist",
+            "skill_ids": ["ux_flow_mapping", "visual_polish"],
+            "instructions": "Own bold product direction and user-facing design decisions.",
+        },
+        {
+            "name": "InterfaceSystems",
+            "role": AgentRole.DESIGNER,
+            "template_id": "designer_interface_systems",
+            "skill_ids": ["frontend_implementation", "ux_flow_mapping"],
+            "instructions": "Own interaction systems, state clarity, and implementable UI structure.",
+        },
+        {
+            "name": "PlatformArchitect",
+            "role": AgentRole.ARCHITECT,
+            "template_id": "architect_delivery_planner",
+            "skill_ids": ["implementation_planning", "api_contracts"],
+            "instructions": "Own delivery seams, architecture choices, and execution sequencing.",
+        },
+        {
+            "name": "IntegrationGuardian",
+            "role": AgentRole.ARCHITECT,
+            "template_id": "architect_integration_guardian",
+            "skill_ids": ["api_contracts", "database_modeling"],
+            "instructions": "Own interfaces, contracts, and long-term system coherence.",
+        },
+        {
+            "name": "SeniorBuilder",
+            "role": AgentRole.DEVELOPER,
+            "template_id": "developer_senior_builder",
+            "skill_ids": ["frontend_implementation", "testing_strategy"],
+            "instructions": "Take core feature implementation work and finish production-shaped slices.",
+        },
+        {
+            "name": "RefactorSpecialist",
+            "role": AgentRole.DEVELOPER,
+            "template_id": "developer_refactor_specialist",
+            "skill_ids": ["debugging_discipline", "testing_strategy"],
+            "instructions": "Take structural cleanup, debugging, and risk-controlled refactors.",
+        },
+        {
+            "name": "PrototypeSprinter",
+            "role": AgentRole.DEVELOPER,
+            "template_id": "developer_prototype_sprinter",
+            "skill_ids": ["frontend_implementation", "documentation_handoff"],
+            "instructions": "Take fast implementation spikes that still leave usable artifacts behind.",
+        },
+        {
+            "name": "RegressionHunter",
+            "role": AgentRole.TESTER,
+            "template_id": "tester_regression_hunter",
+            "skill_ids": ["testing_strategy", "debugging_discipline"],
+            "instructions": "Own regression discovery, edge-case validation, and failure reproduction.",
+        },
+        {
+            "name": "StrictReviewer",
+            "role": AgentRole.REVIEWER,
+            "template_id": "reviewer_strict_code_review",
+            "skill_ids": ["release_readiness", "documentation_handoff"],
+            "instructions": "Own critical review passes and call out correctness or verification gaps directly.",
+        },
+        {
+            "name": "ReleaseGate",
+            "role": AgentRole.REVIEW_AGENT,
+            "template_id": "review_agent_release_gate",
+            "skill_ids": ["release_readiness", "documentation_handoff"],
+            "instructions": "Own final readiness checks before human approval.",
+        },
+    ]
