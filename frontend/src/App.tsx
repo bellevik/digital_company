@@ -2077,7 +2077,7 @@ export default function App() {
                   title="Team Roster"
                   subtitle="The live company roster, with run controls kept visible"
                 >
-                  <div className="entity-list compact-scroll">
+                  <div className="entity-list compact-scroll roster-scroll">
                     {agents.map((agent) => (
                       <article className="entity-card" key={agent.id}>
                         <div className="entity-meta">
@@ -2188,7 +2188,7 @@ export default function App() {
                         <h3>Template</h3>
                         <p>Choose the default operating posture for this role.</p>
                       </div>
-                      <div className="template-picker studio-scroll-section">
+                      <div className="template-picker studio-scroll-section studio-scroll-cards">
                         {roleTemplates.map((template) => (
                           <button
                             className={`template-card ${
@@ -2234,7 +2234,7 @@ export default function App() {
                         <h3>Skills</h3>
                         <p>Select extra behaviors to layer onto this agent.</p>
                       </div>
-                      <div className="skill-grid studio-scroll-section">
+                      <div className="skill-grid studio-scroll-section studio-scroll-cards">
                         {sortedSkills.map((skill) => {
                           const isSelected = agentDraft.skillIds.includes(skill.id);
                           const isRecommended = skill.recommended_roles.includes(agentDraft.role);

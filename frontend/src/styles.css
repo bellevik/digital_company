@@ -317,11 +317,11 @@ pre {
 }
 
 .split-layout-wide {
-  grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(380px, 0.82fr) minmax(0, 1.18fr);
 }
 
 .work-layout {
-  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.92fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(400px, 0.95fr);
 }
 
 .work-inspector-column {
@@ -332,14 +332,16 @@ pre {
 
 .task-board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+  align-items: start;
 }
 
 .kanban-column {
   min-width: 0;
   display: grid;
   gap: 0.75rem;
+  align-content: start;
 }
 
 .kanban-header,
@@ -368,6 +370,7 @@ pre {
 .kanban-stack {
   display: grid;
   gap: 0.8rem;
+  align-content: start;
 }
 
 .task-card,
@@ -571,7 +574,8 @@ pre {
 .compact-scroll {
   max-height: 34rem;
   overflow: auto;
-  padding-right: 0.25rem;
+  padding-right: 0.45rem;
+  padding-left: 0.1rem;
 }
 
 .activity-item pre,
@@ -674,7 +678,16 @@ pre {
 .studio-scroll-section {
   max-height: 26rem;
   overflow: auto;
-  padding-right: 0.25rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.25rem;
+}
+
+.studio-scroll-cards {
+  margin-left: -0.25rem;
+}
+
+.roster-scroll {
+  max-height: none;
+  min-height: 42rem;
 }
 
 .project-list {
