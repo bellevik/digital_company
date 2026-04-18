@@ -41,3 +41,11 @@ class WorkerCycleResponse(BaseModel):
     task_run: TaskRunRead | None = None
     memory_id: uuid.UUID | None = None
     follow_up_task_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class WorkerBatchResponse(BaseModel):
+    total_agents: int
+    completed: int
+    failed: int
+    idle: int
+    results: list[WorkerCycleResponse] = Field(default_factory=list)

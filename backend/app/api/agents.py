@@ -20,6 +20,7 @@ from app.schemas.agent import (
     AgentTemplateRead,
 )
 from app.schemas.worker import WorkerCycleResponse
+from app.schemas.worker import WorkerBatchResponse
 from app.services.agent_catalog import (
     default_template_id_for_role,
     list_agent_skills,
@@ -158,3 +159,52 @@ def run_agent_once(
     except Exception as exc:  # noqa: BLE001
         logger.exception("Agent work endpoint failed", extra={"agent_id": str(agent_id)})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="agent_work_failed") from exc
+
+
+@router.post("/run-all", response_model=WorkerBatchResponse)
+def run_all_agents_once(
+    db: Session = Depends(db_session_dependency),
+    execution_adapter: ExecutionAdapter = Depends(execution_adapter_dependency),
+) -> WorkerBatchResponse:
+    service = WorkerService(
+        db=db,
+        execution_adapter=execution_adapter,
+        settings=get_settings(),
+    )
+    agents = list(
+        db.scalars(
+            select(Agent)
+            .where(Agent.status != AgentStatus.OFFLINE)
+            .order_by(Agent.created_at.asc())
+        ).all()
+    )
+    results: list[WorkerCycleResponse] = []
+    completed = 0
+    failed = 0
+    idle = 0
+
+    for agent in agents:
+        try:
+            result = service.run_agent_once(agent_id=agent.id)
+        except LookupError as exc:
+            logger.exception("Agent disappeared during run-all cycle", extra={"agent_id": str(agent.id)})
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found") from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Run-all endpoint failed", extra={"agent_id": str(agent.id)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="agent_work_failed") from exc
+
+        results.append(result)
+        if result.outcome == "completed":
+            completed += 1
+        elif result.outcome == "failed":
+            failed += 1
+        else:
+            idle += 1
+
+    return WorkerBatchResponse(
+        total_agents=len(agents),
+        completed=completed,
+        failed=failed,
+        idle=idle,
+        results=results,
+    )

@@ -208,6 +208,14 @@ type WorkerCycleResponse = {
   follow_up_task_ids: string[];
 };
 
+type WorkerBatchResponse = {
+  total_agents: number;
+  completed: number;
+  failed: number;
+  idle: number;
+  results: WorkerCycleResponse[];
+};
+
 type SystemSummary = {
   tasks_total: number;
   tasks_todo: number;
@@ -324,6 +332,7 @@ export default function App() {
   const [isSubmittingProject, setIsSubmittingProject] = useState(false);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
+  const [isRunningAllAgents, setIsRunningAllAgents] = useState(false);
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
   const [isDeletingProjectId, setIsDeletingProjectId] = useState<string | null>(null);
@@ -750,6 +759,27 @@ export default function App() {
       );
     } finally {
       setIsRunningAgentId(null);
+    }
+  }
+
+  async function handleRunAllAgents() {
+    setIsRunningAllAgents(true);
+    try {
+      const payload = await apiPost<WorkerBatchResponse>("/api/v1/agents/run-all", {});
+      await refreshDashboard();
+      pushToast(
+        setToast,
+        payload.failed > 0 ? "error" : "success",
+        `Ran ${payload.total_agents} agent(s): ${payload.completed} completed, ${payload.failed} failed, ${payload.idle} idle.`,
+      );
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to run all agents.",
+      );
+    } finally {
+      setIsRunningAllAgents(false);
     }
   }
 
@@ -1591,7 +1621,20 @@ export default function App() {
             )}
           </Panel>
 
-          <Panel title="Agents" subtitle="Create richer agents, attach SKILL.md guides, and run cycles">
+          <Panel
+            title="Agents"
+            subtitle="Create richer agents, attach SKILL.md guides, and run cycles"
+            actions={
+              <button
+                className="secondary-button"
+                disabled={isRunningAllAgents || isRunningAgentId !== null || agents.length === 0}
+                onClick={() => void handleRunAllAgents()}
+                type="button"
+              >
+                {isRunningAllAgents ? "Running All..." : "Run All Agents"}
+              </button>
+            }
+          >
             <form className="form-stack" onSubmit={handleCreateAgent}>
               <label>
                 Agent name
@@ -1763,7 +1806,11 @@ export default function App() {
                   <div className="task-actions">
                     <button
                       className="secondary-button"
-                      disabled={isRunningAgentId === agent.id || isDeletingAgentId === agent.id}
+                      disabled={
+                        isRunningAllAgents ||
+                        isRunningAgentId === agent.id ||
+                        isDeletingAgentId === agent.id
+                      }
                       onClick={() => void handleRunAgent(agent.id)}
                       type="button"
                     >
@@ -1771,7 +1818,11 @@ export default function App() {
                     </button>
                     <button
                       className="danger-button"
-                      disabled={isRunningAgentId === agent.id || isDeletingAgentId === agent.id}
+                      disabled={
+                        isRunningAllAgents ||
+                        isRunningAgentId === agent.id ||
+                        isDeletingAgentId === agent.id
+                      }
                       onClick={() => void handleDeleteAgent(agent)}
                       type="button"
                     >
