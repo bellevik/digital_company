@@ -25,6 +25,9 @@ type ReviewDecisionType = "approved" | "changes_requested";
 type MemoryType = "conversation" | "decision" | "task_result" | "note";
 type TaskRunStatus = "running" | "succeeded" | "failed";
 type SearchStrategy = "keyword" | "vector" | "hybrid";
+type AppView = "overview" | "work" | "projects" | "agents";
+type WorkInspectorTab = "summary" | "activity" | "runs" | "review";
+type ProjectPanelTab = "summary" | "plan" | "tasks";
 type PlanStatus =
   | "draft"
   | "pending_approval"
@@ -325,9 +328,14 @@ export default function App() {
   const [selfImprovementRuns, setSelfImprovementRuns] = useState<
     SelfImprovementRun[]
   >([]);
+  const [activeView, setActiveView] = useState<AppView>("work");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskEvents, setSelectedTaskEvents] = useState<TaskEvent[]>([]);
+  const [workInspectorTab, setWorkInspectorTab] =
+    useState<WorkInspectorTab>("summary");
+  const [projectPanelTab, setProjectPanelTab] =
+    useState<ProjectPanelTab>("summary");
   const [taskDraft, setTaskDraft] = useState(defaultTaskDraft);
   const [projectDraft, setProjectDraft] = useState(defaultProjectDraft);
   const [ideaPitchDraft, setIdeaPitchDraft] = useState(defaultIdeaPitchDraft);
@@ -499,6 +507,30 @@ export default function App() {
   const selectedAgent = selectedTask?.assigned_agent_id
     ? agents.find((agent) => agent.id === selectedTask.assigned_agent_id) ?? null
     : null;
+  const selectedProjectTasks = selectedProject
+    ? tasks.filter((task) => task.project_id === selectedProject.id)
+    : [];
+  const recentTaskRuns = [...taskRuns]
+    .sort((left, right) => right.started_at.localeCompare(left.started_at))
+    .slice(0, 6);
+  const viewTitles: Record<AppView, { title: string; subtitle: string }> = {
+    overview: {
+      title: "Overview",
+      subtitle: "Health, throughput, and company-level controls.",
+    },
+    work: {
+      title: "Work",
+      subtitle: "Queue, inspect, and approve execution without losing context.",
+    },
+    projects: {
+      title: "Projects",
+      subtitle: "Create projects, pitch ideas, and manage bounded plans.",
+    },
+    agents: {
+      title: "Agents",
+      subtitle: "Manage the team, templates, skills, and execution cycles.",
+    },
+  };
 
   async function refreshDashboard() {
     const payload = await Promise.all([
@@ -991,1020 +1023,1271 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Operator Console</p>
-          <h1>Digital Company</h1>
-          <p className="lede">
-            Task board, agent runtime control, memory retrieval, and approval
-            workflow in one UI.
-          </p>
-        </div>
-        <div className="hero-meta">
-          <span className={`badge badge-${apiState.status}`}>
-            {apiState.status}
-          </span>
-          <p>
-            {apiState.status === "loading"
-              ? "Connecting to backend."
-              : apiState.details}
-          </p>
-          <p className="muted">
-            {isRefreshing ? "Refreshing dashboard." : "Polling every 6 seconds."}
-          </p>
-        </div>
-      </section>
+      <div className="app-frame">
+        <aside className="app-sidebar">
+          <div className="sidebar-brand">
+            <p className="eyebrow">Operator Console</p>
+            <h1>Digital Company</h1>
+            <p className="sidebar-copy">
+              A clearer control surface for running projects, plans, and agents.
+            </p>
+          </div>
 
-      {toast ? (
-        <section className={`toast toast-${toast.tone}`}>
-          <p>{toast.message}</p>
-        </section>
-      ) : null}
+          <nav className="sidebar-nav" aria-label="Primary">
+            {(["overview", "work", "projects", "agents"] as AppView[]).map((view) => (
+              <button
+                className={`nav-link ${activeView === view ? "nav-link-active" : ""}`}
+                key={view}
+                onClick={() => setActiveView(view)}
+                type="button"
+              >
+                <span className="nav-label">{viewTitles[view].title}</span>
+                <span className="nav-detail">{viewTitles[view].subtitle}</span>
+              </button>
+            ))}
+          </nav>
 
-      <section className="overview-grid">
-        <MetricCard
-          label="Tasks"
-          value={String(systemSummary?.tasks_total ?? tasks.length)}
-          detail="live queue"
-        />
-        <MetricCard
-          label="In Progress"
-          value={String(
-            systemSummary?.tasks_in_progress ??
-              tasks.filter((task) => task.status === "in_progress").length,
-          )}
-          detail="actively claimed"
-        />
-        <MetricCard
-          label="Pending Review"
-          value={String(systemSummary?.workflows_pending ?? 0)}
-          detail="awaiting human decision"
-        />
-        <MetricCard
-          label="Memories"
-          value={String(systemSummary?.memories_total ?? memories.length)}
-          detail="retrieval corpus"
-        />
-      </section>
-
-      <section className="workspace-grid">
-        <div className="column column-wide">
-          <Panel
-            title="Task Board"
-            subtitle="Queue, status, and workflow state"
-            actions={
-              <span className="panel-note">
-                {selectedTask ? `Selected: ${selectedTask.title}` : "No task selected"}
-              </span>
-            }
-          >
-            <div className="task-board">
-              {(["todo", "in_progress", "done", "failed"] as TaskStatus[]).map(
-                (status) => (
-                  <div className="kanban-column" key={status}>
-                    <header className="kanban-header">
-                      <h3>{labelize(status)}</h3>
-                      <span>{tasks.filter((task) => task.status === status).length}</span>
-                    </header>
-                    <div className="kanban-stack">
-                      {tasks
-                        .filter((task) => task.status === status)
-                        .map((task) => {
-                          const workflow = workflows.find(
-                            (entry) => entry.task_id === task.id,
-                          );
-                          return (
-                            <article
-                              className={`task-card ${
-                                selectedTask?.id === task.id ? "task-card-active" : ""
-                              }`}
-                              key={task.id}
-                              onClick={() => setSelectedTaskId(task.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  setSelectedTaskId(task.id);
-                                }
-                              }}
-                              role="button"
-                              tabIndex={0}
-                            >
-                              <div className="task-card-topline">
-                                <div className="task-card-topline-left">
-                                  <span className={`tag tag-${task.type}`}>
-                                    {task.type}
-                                  </span>
-                                  <span className="task-project">
-                                    {formatTaskProject(task.project_id, projects)}
-                                  </span>
-                                </div>
-                                <button
-                                  aria-label={`Delete ${task.title}`}
-                                  className="task-card-delete"
-                                  disabled={taskActionInFlight !== null}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleDeleteTask(task);
-                                  }}
-                                  type="button"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              <h4>{task.title}</h4>
-                              <p>{task.description}</p>
-                              <div className="task-card-footer">
-                                <span>
-                                  {task.assigned_agent_id
-                                    ? findAgentName(task.assigned_agent_id, agents)
-                                    : "unassigned"}
-                                </span>
-                                <span className={`approval approval-${workflow?.approval_status ?? "not_required"}`}>
-                                  {workflow?.approval_status ?? "not_required"}
-                                </span>
-                              </div>
-                            </article>
-                          );
-                        })}
-                    </div>
-                  </div>
-                ),
-              )}
+          <div className="sidebar-section">
+            <p className="section-kicker">Live State</p>
+            <div className="sidebar-stat-list">
+              <div className="sidebar-stat">
+                <span>Todo</span>
+                <strong>{systemSummary?.tasks_todo ?? tasks.filter((task) => task.status === "todo").length}</strong>
+              </div>
+              <div className="sidebar-stat">
+                <span>Busy agents</span>
+                <strong>{systemSummary?.agents_busy ?? agents.filter((agent) => agent.status === "busy").length}</strong>
+              </div>
+              <div className="sidebar-stat">
+                <span>Projects</span>
+                <strong>{projects.length}</strong>
+              </div>
+              <div className="sidebar-stat">
+                <span>Pending review</span>
+                <strong>{systemSummary?.workflows_pending ?? 0}</strong>
+              </div>
             </div>
-          </Panel>
+          </div>
 
-          <div className="detail-grid">
-            <Panel
-              title="Task Detail"
-              subtitle="Activity, runs, and review state"
-              actions={
-                selectedTask ? (
-                  <span className="panel-note">
-                    {selectedAgent
-                      ? `Assigned to ${selectedAgent.name}`
-                      : "No assigned agent"}
-                  </span>
-                ) : null
-              }
-            >
-              {selectedTask ? (
-                <div className="detail-block">
-                  <div className="detail-headline">
-                    <div>
-                      <h3>{selectedTask.title}</h3>
-                      <p className="muted">
-                        {selectedTask.type} • {formatTaskProject(selectedTask.project_id, projects)}
-                      </p>
-                    </div>
-                    <span className={`status-pill status-${selectedTask.status}`}>
-                      {selectedTask.status}
-                    </span>
-                  </div>
-                  <p className="detail-copy">{selectedTask.description}</p>
-                  <div className="task-actions">
+          <div className="sidebar-section sidebar-status">
+            <span className={`badge badge-${apiState.status}`}>{apiState.status}</span>
+            <p>{apiState.status === "loading" ? "Connecting to backend." : apiState.details}</p>
+            <p className="muted">
+              {isRefreshing ? "Refreshing dashboard." : "Polling every 2.5 seconds."}
+            </p>
+          </div>
+        </aside>
+
+        <div className="app-main">
+          <header className="topbar">
+            <div>
+              <p className="eyebrow">Current View</p>
+              <h2>{viewTitles[activeView].title}</h2>
+              <p className="topbar-copy">{viewTitles[activeView].subtitle}</p>
+            </div>
+            <div className="topbar-actions">
+              <button
+                className="secondary-button"
+                disabled={isSeedingStartupTeam || isRunningAllAgents || isRunningAgentId !== null}
+                onClick={() => void handleSeedStartupTeam()}
+                type="button"
+              >
+                {isSeedingStartupTeam ? "Seeding Team..." : "Seed Startup Team"}
+              </button>
+              <button
+                className="primary-button"
+                disabled={isRunningAllAgents || isRunningAgentId !== null || agents.length === 0}
+                onClick={() => void handleRunAllAgents()}
+                type="button"
+              >
+                {isRunningAllAgents ? "Running All..." : "Run All Agents"}
+              </button>
+            </div>
+          </header>
+
+          {toast ? (
+            <section className={`toast toast-${toast.tone}`}>
+              <p>{toast.message}</p>
+            </section>
+          ) : null}
+
+          {activeView === "overview" ? (
+            <div className="content-stack">
+              <section className="overview-grid">
+                <MetricCard
+                  label="Tasks"
+                  value={String(systemSummary?.tasks_total ?? tasks.length)}
+                  detail="total tracked work"
+                />
+                <MetricCard
+                  label="In Progress"
+                  value={String(
+                    systemSummary?.tasks_in_progress ??
+                      tasks.filter((task) => task.status === "in_progress").length,
+                  )}
+                  detail="currently being executed"
+                />
+                <MetricCard
+                  label="Agents"
+                  value={String(systemSummary?.agents_total ?? agents.length)}
+                  detail="available roster"
+                />
+                <MetricCard
+                  label="Memories"
+                  value={String(systemSummary?.memories_total ?? memories.length)}
+                  detail="retrieval corpus"
+                />
+              </section>
+
+              <section className="dashboard-grid">
+                <Panel
+                  title="Mission Control"
+                  subtitle="High-value controls without digging through the app"
+                >
+                  <div className="action-grid">
+                    <button
+                      className="primary-button"
+                      disabled={isSeedingDemo}
+                      onClick={() => void handleSeedDemo()}
+                      type="button"
+                    >
+                      {isSeedingDemo ? "Seeding..." : "Seed Demo"}
+                    </button>
                     <button
                       className="secondary-button"
-                      disabled={
-                        taskActionInFlight !== null ||
-                        selectedTask.status === "todo" ||
-                        selectedTask.status === "in_progress"
-                      }
-                      onClick={() => void handleRetryTask()}
+                      disabled={isRunningSelfImprovement}
+                      onClick={() => void handleRunSelfImprovement()}
                       type="button"
                     >
-                      {taskActionInFlight === "retry" ? "Retrying..." : "Retry Task"}
+                      {isRunningSelfImprovement ? "Running..." : "Run Self-Improvement"}
                     </button>
                     <button
-                      className="danger-button"
-                      disabled={taskActionInFlight !== null}
-                      onClick={() => void handleDeleteTask()}
+                      className="secondary-button"
+                      onClick={() => setActiveView("projects")}
                       type="button"
                     >
-                      {taskActionInFlight === `delete:${selectedTask.id}` ? "Deleting..." : "Delete Task"}
+                      Open Projects
+                    </button>
+                    <button
+                      className="secondary-button"
+                      onClick={() => setActiveView("agents")}
+                      type="button"
+                    >
+                      Open Agents
                     </button>
                   </div>
-                  <div className="detail-section">
-                    <h4>Workflow</h4>
-                    {selectedWorkflow ? (
-                      <div className="workflow-summary">
-                        <p>
-                          <strong>Status:</strong> {selectedWorkflow.approval_status}
-                        </p>
-                        <p>
-                          <strong>Branch:</strong>{" "}
-                          {selectedWorkflow.branch_name ?? "not submitted"}
-                        </p>
-                        <p>
-                          <strong>Submission notes:</strong>{" "}
-                          {selectedWorkflow.submission_notes ?? "none"}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="muted">No workflow record yet.</p>
-                    )}
+                  <div className="workflow-summary">
+                    <p>
+                      <strong>Scheduler enabled:</strong>{" "}
+                      {systemSummary?.scheduler_enabled ? "yes" : "no"}
+                    </p>
+                    <p>
+                      <strong>Scheduler running:</strong>{" "}
+                      {systemSummary?.scheduler_running ? "yes" : "no"}
+                    </p>
+                    <p>
+                      <strong>Improvement runs:</strong>{" "}
+                      {systemSummary?.self_improvement_runs_total ?? 0}
+                    </p>
                   </div>
-                  <div className="detail-section">
-                    <h4>Activity Feed</h4>
-                    <div className="activity-feed">
-                      {selectedTaskEvents.map((entry) => (
-                        <article className="activity-item" key={entry.id}>
-                          <div className="activity-meta">
-                            <span>{entry.event_type}</span>
-                            <time>{formatDateTime(entry.created_at)}</time>
-                          </div>
-                          <pre>{JSON.stringify(entry.payload, null, 2)}</pre>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="detail-section">
-                    <h4>Task Runs</h4>
-                    <div className="run-stack">
-                      {selectedTaskRuns.map((taskRun) => (
-                        <article className="run-card" key={taskRun.id}>
-                          <div className="run-header">
+                </Panel>
+
+                <Panel title="Recent Agent Runs" subtitle="Latest execution attempts across the company">
+                  <div className="entity-list">
+                    {recentTaskRuns.length > 0 ? (
+                      recentTaskRuns.map((taskRun) => (
+                        <article className="entity-card" key={taskRun.id}>
+                          <div className="entity-meta">
+                            <div>
+                              <h4>{tasks.find((task) => task.id === taskRun.task_id)?.title ?? "Unknown task"}</h4>
+                              <p>{findAgentName(taskRun.agent_id, agents)}</p>
+                            </div>
                             <span className={`status-pill status-${mapRunStatus(taskRun.status)}`}>
                               {taskRun.status}
                             </span>
-                            <span>{findAgentName(taskRun.agent_id, agents)}</span>
-                            <time>{formatDateTime(taskRun.started_at)}</time>
                           </div>
-                          <p className="run-summary">
-                            follow-up tasks: {taskRun.created_follow_up_tasks} • exit code:{" "}
-                            {taskRun.exit_code ?? "n/a"}
-                          </p>
-                          {taskRun.status === "running" ? (
-                            <div className="live-run-summary">
-                              <strong>Live update:</strong>{" "}
-                              {summarizeRunProgress(taskRun)}
-                              <span className="muted"> • updated {formatDateTime(taskRun.updated_at)}</span>
-                            </div>
-                          ) : null}
-                          <details open={taskRun.status === "running"}>
-                            <summary>stdout</summary>
-                            <pre>{taskRun.stdout || (taskRun.status === "running" ? "Waiting for stdout..." : "No stdout captured.")}</pre>
-                          </details>
-                          <details open={taskRun.status === "running"}>
-                            <summary>stderr</summary>
-                            <pre>{taskRun.stderr || (taskRun.status === "running" ? "Waiting for stderr..." : "No stderr captured.")}</pre>
-                          </details>
-                          <details>
-                            <summary>prompt</summary>
-                            <pre>{taskRun.prompt}</pre>
-                          </details>
+                          <p>{summarizeRunProgress(taskRun)}</p>
+                          <p className="muted">{formatDateTime(taskRun.started_at)}</p>
                         </article>
-                      ))}
-                    </div>
+                      ))
+                    ) : (
+                      <p className="muted">No task runs yet.</p>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <p className="muted">Create a task to begin operating the system.</p>
-              )}
-            </Panel>
+                </Panel>
 
-            <Panel title="Approval Controls" subtitle="Submit and review selected task">
-              {selectedTask ? (
-                <div className="form-stack">
-                  <label>
-                    Branch name
-                    <input
-                      value={reviewDraft.branchName}
-                      onChange={(event) =>
-                        setReviewDraft((current) => ({
-                          ...current,
-                          branchName: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Submission notes
-                    <textarea
-                      rows={3}
-                      value={reviewDraft.submissionNotes}
-                      onChange={(event) =>
-                        setReviewDraft((current) => ({
-                          ...current,
-                          submissionNotes: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <button
-                    className="primary-button"
-                    disabled={isSubmittingWorkflow || selectedTask.status !== "done"}
-                    onClick={() => void handleSubmitForReview()}
-                    type="button"
-                  >
-                    Submit For Review
-                  </button>
-                  <label>
-                    Reviewer
-                    <input
-                      value={reviewDraft.reviewerName}
-                      onChange={(event) =>
-                        setReviewDraft((current) => ({
-                          ...current,
-                          reviewerName: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Decision
-                    <select
-                      value={reviewDraft.decision}
-                      onChange={(event) =>
-                        setReviewDraft((current) => ({
-                          ...current,
-                          decision: event.target.value as ReviewDecisionType,
-                        }))
-                      }
-                    >
-                      <option value="approved">approved</option>
-                      <option value="changes_requested">changes_requested</option>
-                    </select>
-                  </label>
-                  <label>
-                    Review summary
-                    <textarea
-                      rows={4}
-                      value={reviewDraft.summary}
-                      onChange={(event) =>
-                        setReviewDraft((current) => ({
-                          ...current,
-                          summary: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <button
-                    className="secondary-button"
-                    disabled={isSubmittingWorkflow || !reviewDraft.summary.trim()}
-                    onClick={() => void handleRecordDecision()}
-                    type="button"
-                  >
-                    Record Decision
-                  </button>
-                </div>
-              ) : (
-                <p className="muted">Select a task to operate the approval flow.</p>
-              )}
-            </Panel>
-          </div>
-        </div>
+                <Panel title="Projects At A Glance" subtitle="Open the projects view to manage plans and task creation">
+                  <div className="entity-list">
+                    {projects.slice(0, 5).map((project) => (
+                      <article className="entity-card" key={project.id}>
+                        <div className="entity-meta">
+                          <div>
+                            <h4>{project.name}</h4>
+                            <p>{project.id}</p>
+                          </div>
+                          <span className="score-pill">
+                            {tasks.filter((task) => task.project_id === project.id).length} task(s)
+                          </span>
+                        </div>
+                        <p>{project.description ?? "No project description yet."}</p>
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setProjectPanelTab("summary");
+                            setActiveView("projects");
+                          }}
+                          type="button"
+                        >
+                          Open Project
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </Panel>
 
-        <div className="column">
-          <Panel
-            title="System Operations"
-            subtitle="Seed demo data and run the daily improvement loop"
-          >
-            <div className="form-stack">
-              <div className="workflow-summary">
-                <p>
-                  <strong>Scheduler enabled:</strong>{" "}
-                  {systemSummary?.scheduler_enabled ? "yes" : "no"}
-                </p>
-                <p>
-                  <strong>Scheduler running:</strong>{" "}
-                  {systemSummary?.scheduler_running ? "yes" : "no"}
-                </p>
-                <p>
-                  <strong>Improvement runs:</strong>{" "}
-                  {systemSummary?.self_improvement_runs_total ?? 0}
-                </p>
-              </div>
-              <button
-                className="primary-button"
-                disabled={isSeedingDemo}
-                onClick={() => void handleSeedDemo()}
-                type="button"
-              >
-                {isSeedingDemo ? "Seeding..." : "Seed Demo"}
-              </button>
-              <button
-                className="secondary-button"
-                disabled={isRunningSelfImprovement}
-                onClick={() => void handleRunSelfImprovement()}
-                type="button"
-              >
-                {isRunningSelfImprovement
-                  ? "Running..."
-                  : "Run Self-Improvement"}
-              </button>
-              <div className="entity-list">
-                {selfImprovementRuns.slice(0, 4).map((run) => (
-                  <article className="entity-card" key={run.id}>
-                    <div className="entity-meta">
-                      <div>
-                        <h4>{run.trigger_mode}</h4>
-                        <p>{formatDateTime(run.started_at)}</p>
-                      </div>
-                      <span className={`status-pill status-${mapSelfImprovementStatus(run.status)}`}>
-                        {run.status}
-                      </span>
-                    </div>
-                    <p>{run.summary}</p>
-                    <p className="muted">
-                      {run.proposed_branch_name} • {run.created_task_count} task(s)
-                    </p>
-                  </article>
-                ))}
-              </div>
+                <Panel title="Self-Improvement History" subtitle="Most recent improvement cycles">
+                  <div className="entity-list">
+                    {selfImprovementRuns.slice(0, 4).map((run) => (
+                      <article className="entity-card" key={run.id}>
+                        <div className="entity-meta">
+                          <div>
+                            <h4>{run.trigger_mode}</h4>
+                            <p>{formatDateTime(run.started_at)}</p>
+                          </div>
+                          <span className={`status-pill status-${mapSelfImprovementStatus(run.status)}`}>
+                            {run.status}
+                          </span>
+                        </div>
+                        <p>{run.summary}</p>
+                        <p className="muted">
+                          {run.proposed_branch_name} • {run.created_task_count} task(s)
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </Panel>
+              </section>
             </div>
-          </Panel>
+          ) : null}
 
-          <Panel
-            title="Projects"
-            subtitle="Create projects and then place tasks inside them"
-          >
-            <form className="form-stack" onSubmit={handleCreateProject}>
-              <label>
-                Project ID
-                <input
-                  required
-                  placeholder="futurecalc"
-                  value={projectDraft.id}
-                  onChange={(event) =>
-                    setProjectDraft((current) => ({
-                      ...current,
-                      id: event.target.value,
-                    }))
-                  }
+          {activeView === "work" ? (
+            <div className="content-stack">
+              <section className="overview-grid overview-grid-compact">
+                <MetricCard
+                  label="Todo"
+                  value={String(systemSummary?.tasks_todo ?? tasks.filter((task) => task.status === "todo").length)}
+                  detail="ready to claim"
                 />
-              </label>
-              <label>
-                Project name
-                <input
-                  required
-                  placeholder="FutureCalc"
-                  value={projectDraft.name}
-                  onChange={(event) =>
-                    setProjectDraft((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
+                <MetricCard
+                  label="Done"
+                  value={String(systemSummary?.tasks_done ?? tasks.filter((task) => task.status === "done").length)}
+                  detail="completed output"
                 />
-              </label>
-              <label>
-                Description
-                <textarea
-                  rows={3}
-                  value={projectDraft.description}
-                  onChange={(event) =>
-                    setProjectDraft((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
+                <MetricCard
+                  label="Failed"
+                  value={String(systemSummary?.tasks_failed ?? tasks.filter((task) => task.status === "failed").length)}
+                  detail="needs intervention"
                 />
-              </label>
-              <button className="primary-button" disabled={isSubmittingProject} type="submit">
-                {isSubmittingProject ? "Creating..." : "Create Project"}
-              </button>
-            </form>
-            <div className="entity-list project-list">
-              {projects.map((project) => (
-                <article
-                  className={`entity-card ${
-                    selectedProject?.id === project.id ? "entity-card-active" : ""
-                  }`}
-                  key={project.id}
-                  onClick={() => setSelectedProjectId(project.id)}
+                <MetricCard
+                  label="Pending Review"
+                  value={String(systemSummary?.workflows_pending ?? 0)}
+                  detail="waiting for approval"
+                />
+              </section>
+
+              <section className="work-layout">
+                <Panel
+                  title="Task Board"
+                  subtitle="The execution queue, now isolated from everything else"
+                  actions={
+                    <span className="panel-note">
+                      {selectedTask ? `Selected: ${selectedTask.title}` : "Select a task"}
+                    </span>
+                  }
                 >
-                  <div className="entity-meta">
-                    <div className="task-card-topline-left">
-                      <div>
-                        <h4>{project.name}</h4>
-                        <p>{project.id}</p>
+                  <div className="task-board">
+                    {(["todo", "in_progress", "done", "failed"] as TaskStatus[]).map((status) => (
+                      <div className="kanban-column" key={status}>
+                        <header className="kanban-header">
+                          <h3>{labelize(status)}</h3>
+                          <span>{tasks.filter((task) => task.status === status).length}</span>
+                        </header>
+                        <div className="kanban-stack">
+                          {tasks
+                            .filter((task) => task.status === status)
+                            .map((task) => {
+                              const workflow = workflows.find((entry) => entry.task_id === task.id);
+                              return (
+                                <article
+                                  className={`task-card ${
+                                    selectedTask?.id === task.id ? "task-card-active" : ""
+                                  }`}
+                                  key={task.id}
+                                  onClick={() => setSelectedTaskId(task.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      setSelectedTaskId(task.id);
+                                    }
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                >
+                                  <div className="task-card-topline">
+                                    <div className="task-card-topline-left">
+                                      <span className={`tag tag-${task.type}`}>{task.type}</span>
+                                      <span className="task-project">
+                                        {formatTaskProject(task.project_id, projects)}
+                                      </span>
+                                    </div>
+                                    <button
+                                      aria-label={`Delete ${task.title}`}
+                                      className="task-card-delete"
+                                      disabled={taskActionInFlight !== null}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleDeleteTask(task);
+                                      }}
+                                      type="button"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                  <h4>{task.title}</h4>
+                                  <p>{task.description}</p>
+                                  <div className="task-card-footer">
+                                    <span>
+                                      {task.assigned_agent_id
+                                        ? findAgentName(task.assigned_agent_id, agents)
+                                        : "unassigned"}
+                                    </span>
+                                    <span className={`approval approval-${workflow?.approval_status ?? "not_required"}`}>
+                                      {workflow?.approval_status ?? "not_required"}
+                                    </span>
+                                  </div>
+                                </article>
+                              );
+                            })}
+                        </div>
                       </div>
-                    </div>
-                    <div className="card-meta-actions">
-                      <span className="score-pill">
-                        {tasks.filter((task) => task.project_id === project.id).length} task(s)
-                      </span>
-                      <button
-                        aria-label={`Delete ${project.name}`}
-                        className="task-card-delete"
-                        disabled={isDeletingProjectId !== null}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDeleteProject(project);
-                        }}
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                  <p>{project.description ?? "No project description yet."}</p>
-                  <p className="muted">workspace: projects/{project.id}</p>
-                  <button
-                    className="secondary-button"
-                    onClick={() => {
-                      setSelectedProjectId(project.id);
-                      setTaskDraft((current) => ({ ...current, projectId: project.id }));
-                    }}
-                    type="button"
+                </Panel>
+
+                <div className="work-inspector-column">
+                  <Panel
+                    title="Task Inspector"
+                    subtitle="One selected task, with the important context grouped together"
+                    actions={
+                      selectedTask ? (
+                        <span className="panel-note">
+                          {selectedAgent ? `Assigned to ${selectedAgent.name}` : "No assigned agent"}
+                        </span>
+                      ) : null
+                    }
                   >
-                    Use For Task Creation
-                  </button>
-                </article>
-              ))}
-            </div>
-          </Panel>
+                    {selectedTask ? (
+                      <div className="detail-block">
+                        <div className="detail-headline detail-headline-stack">
+                          <div>
+                            <h3>{selectedTask.title}</h3>
+                            <p className="muted">
+                              {selectedTask.type} • {formatTaskProject(selectedTask.project_id, projects)}
+                            </p>
+                          </div>
+                          <span className={`status-pill status-${selectedTask.status}`}>
+                            {selectedTask.status}
+                          </span>
+                        </div>
 
-          <Panel
-            title="Project Planning"
-            subtitle="Pitch an idea, let a planner draft the plan, then approve it onto the board"
-          >
-            {selectedProject ? (
-              <div className="form-stack">
-                <div className="workflow-summary">
-                  <p>
-                    <strong>Selected project:</strong> {selectedProject.name} ({selectedProject.id})
-                  </p>
-                  <p>
-                    <strong>Latest plan:</strong>{" "}
-                    {selectedProjectPlan ? selectedProjectPlan.status : "none yet"}
-                  </p>
-                </div>
-                <form className="form-stack" onSubmit={handlePitchIdea}>
-                  <label>
-                    Idea title
-                    <input
-                      required
-                      placeholder="Launch a futuristic calculator product"
-                      value={ideaPitchDraft.title}
-                      onChange={(event) =>
-                        setIdeaPitchDraft((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Idea description
-                    <textarea
-                      required
-                      rows={4}
-                      placeholder="Describe the idea, goal, and why it matters before execution starts."
-                      value={ideaPitchDraft.description}
-                      onChange={(event) =>
-                        setIdeaPitchDraft((current) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <button className="primary-button" disabled={isPitchingIdea} type="submit">
-                    {isPitchingIdea ? "Pitching..." : "Pitch Idea"}
-                  </button>
-                </form>
+                        <div className="task-actions">
+                          <button
+                            className="secondary-button"
+                            disabled={
+                              taskActionInFlight !== null ||
+                              selectedTask.status === "todo" ||
+                              selectedTask.status === "in_progress"
+                            }
+                            onClick={() => void handleRetryTask()}
+                            type="button"
+                          >
+                            {taskActionInFlight === "retry" ? "Retrying..." : "Retry Task"}
+                          </button>
+                          <button
+                            className="danger-button"
+                            disabled={taskActionInFlight !== null}
+                            onClick={() => void handleDeleteTask()}
+                            type="button"
+                          >
+                            {taskActionInFlight === `delete:${selectedTask.id}` ? "Deleting..." : "Delete Task"}
+                          </button>
+                        </div>
 
-                {selectedProjectPlan ? (
-                  <article className="entity-card">
-                    <div className="entity-meta">
-                      <div>
-                        <h4>{selectedProjectPlan.idea_title}</h4>
-                        <p>{selectedProjectPlan.status}</p>
-                      </div>
-                      <span className={`status-pill status-${mapPlanStatus(selectedProjectPlan.status)}`}>
-                        {selectedProjectPlan.created_task_count}/{selectedProjectPlan.max_total_tasks}
-                      </span>
-                    </div>
-                    <p>{selectedProjectPlan.idea_description}</p>
-                    <p className="muted">
-                      {selectedProjectPlan.planner_summary ?? "No planner summary yet. Run a planner agent on the idea task."}
-                    </p>
-                    {selectedProjectPlan.feedback ? (
-                      <p className="muted">latest feedback: {selectedProjectPlan.feedback}</p>
-                    ) : null}
-                    <div className="entity-list">
-                      {selectedProjectPlan.items.map((item) => (
-                        <article className="activity-item" key={item.id}>
-                          <div className="entity-meta">
-                            <div>
-                              <h4>{item.title}</h4>
+                        <div className="segmented-control">
+                          {(["summary", "activity", "runs", "review"] as WorkInspectorTab[]).map((tab) => (
+                            <button
+                              className={`segment ${workInspectorTab === tab ? "segment-active" : ""}`}
+                              key={tab}
+                              onClick={() => setWorkInspectorTab(tab)}
+                              type="button"
+                            >
+                              {labelize(tab)}
+                            </button>
+                          ))}
+                        </div>
+
+                        {workInspectorTab === "summary" ? (
+                          <div className="detail-section">
+                            <p className="detail-copy">{selectedTask.description}</p>
+                            <div className="workflow-summary">
                               <p>
-                                {item.type} • spawn budget {item.spawn_budget}
+                                <strong>Workflow status:</strong>{" "}
+                                {selectedWorkflow?.approval_status ?? "not_required"}
+                              </p>
+                              <p>
+                                <strong>Branch:</strong>{" "}
+                                {selectedWorkflow?.branch_name ?? "not submitted"}
+                              </p>
+                              <p>
+                                <strong>Submission notes:</strong>{" "}
+                                {selectedWorkflow?.submission_notes ?? "none"}
+                              </p>
+                              <p>
+                                <strong>Completed at:</strong>{" "}
+                                {selectedTask.completed_at
+                                  ? formatDateTime(selectedTask.completed_at)
+                                  : "not completed"}
                               </p>
                             </div>
-                            <span className={`status-pill status-${mapPlanTaskStatus(item.status)}`}>
-                              {item.status}
+                          </div>
+                        ) : null}
+
+                        {workInspectorTab === "activity" ? (
+                          <div className="detail-section">
+                            <div className="activity-feed">
+                              {selectedTaskEvents.map((entry) => (
+                                <article className="activity-item" key={entry.id}>
+                                  <div className="activity-meta">
+                                    <span>{entry.event_type}</span>
+                                    <time>{formatDateTime(entry.created_at)}</time>
+                                  </div>
+                                  <pre>{JSON.stringify(entry.payload, null, 2)}</pre>
+                                </article>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {workInspectorTab === "runs" ? (
+                          <div className="detail-section">
+                            <div className="run-stack">
+                              {selectedTaskRuns.map((taskRun) => (
+                                <article className="run-card" key={taskRun.id}>
+                                  <div className="run-header">
+                                    <span className={`status-pill status-${mapRunStatus(taskRun.status)}`}>
+                                      {taskRun.status}
+                                    </span>
+                                    <span>{findAgentName(taskRun.agent_id, agents)}</span>
+                                    <time>{formatDateTime(taskRun.started_at)}</time>
+                                  </div>
+                                  <p className="run-summary">
+                                    follow-up tasks: {taskRun.created_follow_up_tasks} • exit code:{" "}
+                                    {taskRun.exit_code ?? "n/a"}
+                                  </p>
+                                  {taskRun.status === "running" ? (
+                                    <div className="live-run-summary">
+                                      <strong>Live update:</strong> {summarizeRunProgress(taskRun)}
+                                      <span className="muted"> • updated {formatDateTime(taskRun.updated_at)}</span>
+                                    </div>
+                                  ) : null}
+                                  <details open={taskRun.status === "running"}>
+                                    <summary>stdout</summary>
+                                    <pre>
+                                      {taskRun.stdout ||
+                                        (taskRun.status === "running"
+                                          ? "Waiting for stdout..."
+                                          : "No stdout captured.")}
+                                    </pre>
+                                  </details>
+                                  <details open={taskRun.status === "running"}>
+                                    <summary>stderr</summary>
+                                    <pre>
+                                      {taskRun.stderr ||
+                                        (taskRun.status === "running"
+                                          ? "Waiting for stderr..."
+                                          : "No stderr captured.")}
+                                    </pre>
+                                  </details>
+                                  <details>
+                                    <summary>prompt</summary>
+                                    <pre>{taskRun.prompt}</pre>
+                                  </details>
+                                </article>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {workInspectorTab === "review" ? (
+                          <div className="detail-section">
+                            <div className="form-stack">
+                              <label>
+                                Branch name
+                                <input
+                                  value={reviewDraft.branchName}
+                                  onChange={(event) =>
+                                    setReviewDraft((current) => ({
+                                      ...current,
+                                      branchName: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Submission notes
+                                <textarea
+                                  rows={3}
+                                  value={reviewDraft.submissionNotes}
+                                  onChange={(event) =>
+                                    setReviewDraft((current) => ({
+                                      ...current,
+                                      submissionNotes: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <button
+                                className="primary-button"
+                                disabled={isSubmittingWorkflow || selectedTask.status !== "done"}
+                                onClick={() => void handleSubmitForReview()}
+                                type="button"
+                              >
+                                Submit For Review
+                              </button>
+                              <label>
+                                Reviewer
+                                <input
+                                  value={reviewDraft.reviewerName}
+                                  onChange={(event) =>
+                                    setReviewDraft((current) => ({
+                                      ...current,
+                                      reviewerName: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Decision
+                                <select
+                                  value={reviewDraft.decision}
+                                  onChange={(event) =>
+                                    setReviewDraft((current) => ({
+                                      ...current,
+                                      decision: event.target.value as ReviewDecisionType,
+                                    }))
+                                  }
+                                >
+                                  <option value="approved">approved</option>
+                                  <option value="changes_requested">changes_requested</option>
+                                </select>
+                              </label>
+                              <label>
+                                Review summary
+                                <textarea
+                                  rows={4}
+                                  value={reviewDraft.summary}
+                                  onChange={(event) =>
+                                    setReviewDraft((current) => ({
+                                      ...current,
+                                      summary: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <button
+                                className="secondary-button"
+                                disabled={isSubmittingWorkflow || !reviewDraft.summary.trim()}
+                                onClick={() => void handleRecordDecision()}
+                                type="button"
+                              >
+                                Record Decision
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="muted">Select a task from the board to inspect it.</p>
+                    )}
+                  </Panel>
+
+                  <Panel title="Memory Search" subtitle="Project-aware retrieval stays available, but out of the main way">
+                    <form className="form-stack" onSubmit={handleSearchMemory}>
+                      <label>
+                        Query
+                        <input
+                          value={memoryQuery}
+                          onChange={(event) => setMemoryQuery(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Strategy
+                        <select
+                          value={memoryStrategy}
+                          onChange={(event) =>
+                            setMemoryStrategy(event.target.value as SearchStrategy)
+                          }
+                        >
+                          <option value="hybrid">hybrid</option>
+                          <option value="keyword">keyword</option>
+                          <option value="vector">vector</option>
+                        </select>
+                      </label>
+                      <button className="secondary-button" type="submit">
+                        Search Memory
+                      </button>
+                    </form>
+                    <div className="entity-list compact-scroll">
+                      {memoryResults.map((result) => (
+                        <article className="entity-card" key={result.memory_id}>
+                          <div className="entity-meta">
+                            <div>
+                              <h4>{result.summary}</h4>
+                              <p>{result.type}</p>
+                            </div>
+                            <span className="score-pill">
+                              {result.combined_score.toFixed(3)}
                             </span>
                           </div>
-                          <p>{item.description}</p>
+                          <p>{result.content}</p>
+                          <p className="muted">
+                            keyword {result.keyword_score.toFixed(3)} • vector{" "}
+                            {result.vector_score.toFixed(3)}
+                          </p>
                         </article>
                       ))}
                     </div>
+                  </Panel>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "projects" ? (
+            <div className="content-stack">
+              <section className="split-layout">
+                <Panel
+                  title="Project Directory"
+                  subtitle="Create projects on the left, then operate one project at a time"
+                >
+                  <form className="form-stack" onSubmit={handleCreateProject}>
                     <label>
-                      Feedback for changes
-                      <textarea
-                        rows={3}
-                        placeholder="Optional: Tell the planner what to change before approving."
-                        value={ideaPitchDraft.feedback}
+                      Project ID
+                      <input
+                        required
+                        placeholder="futurecalc"
+                        value={projectDraft.id}
                         onChange={(event) =>
-                          setIdeaPitchDraft((current) => ({
+                          setProjectDraft((current) => ({
                             ...current,
-                            feedback: event.target.value,
+                            id: event.target.value,
                           }))
                         }
                       />
                     </label>
-                    <div className="task-actions">
-                      <button
-                        className="primary-button"
-                        disabled={
-                          isSubmittingPlanDecision ||
-                          !["pending_approval", "changes_requested"].includes(selectedProjectPlan.status)
+                    <label>
+                      Project name
+                      <input
+                        required
+                        placeholder="FutureCalc"
+                        value={projectDraft.name}
+                        onChange={(event) =>
+                          setProjectDraft((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
                         }
-                        onClick={() => void handleApprovePlan(selectedProjectPlan.id)}
-                        type="button"
-                      >
-                        Approve Plan
-                      </button>
-                      <button
-                        className="secondary-button"
-                        disabled={
-                          isSubmittingPlanDecision ||
-                          !selectedProjectPlan.items.length ||
-                          !ideaPitchDraft.feedback.trim()
+                      />
+                    </label>
+                    <label>
+                      Description
+                      <textarea
+                        rows={3}
+                        value={projectDraft.description}
+                        onChange={(event) =>
+                          setProjectDraft((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
                         }
-                        onClick={() => void handleRequestPlanChanges(selectedProjectPlan.id)}
-                        type="button"
-                      >
-                        Request Changes
-                      </button>
-                    </div>
-                  </article>
-                ) : (
-                  <p className="muted">Pitch an idea for the selected project to start a bounded plan.</p>
-                )}
-              </div>
-            ) : (
-              <p className="muted">Create or select a project first.</p>
-            )}
-          </Panel>
+                      />
+                    </label>
+                    <button className="primary-button" disabled={isSubmittingProject} type="submit">
+                      {isSubmittingProject ? "Creating..." : "Create Project"}
+                    </button>
+                  </form>
 
-          <Panel
-            title="Agents"
-            subtitle="Create richer agents, attach SKILL.md guides, and run cycles"
-            actions={
-              <div className="task-actions">
-                <button
-                  className="secondary-button"
-                  disabled={isSeedingStartupTeam || isRunningAllAgents || isRunningAgentId !== null}
-                  onClick={() => void handleSeedStartupTeam()}
-                  type="button"
-                >
-                  {isSeedingStartupTeam ? "Seeding Team..." : "Seed Startup Team"}
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={isRunningAllAgents || isRunningAgentId !== null || agents.length === 0}
-                  onClick={() => void handleRunAllAgents()}
-                  type="button"
-                >
-                  {isRunningAllAgents ? "Running All..." : "Run All Agents"}
-                </button>
-              </div>
-            }
-          >
-            <form className="form-stack" onSubmit={handleCreateAgent}>
-              <label>
-                Agent name
-                <input
-                  required
-                  placeholder="DesignyBoi"
-                  value={agentDraft.name}
-                  onChange={(event) =>
-                    setAgentDraft((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Role
-                <select
-                  value={agentDraft.role}
-                  onChange={(event) =>
-                    setAgentDraft((current) => ({
-                      ...current,
-                      role: event.target.value as AgentRole,
-                    }))
+                  <div className="entity-list project-list">
+                    {projects.map((project) => (
+                      <article
+                        className={`entity-card ${selectedProject?.id === project.id ? "entity-card-active" : ""}`}
+                        key={project.id}
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          setTaskDraft((current) => ({ ...current, projectId: project.id }));
+                        }}
+                      >
+                        <div className="entity-meta">
+                          <div>
+                            <h4>{project.name}</h4>
+                            <p>{project.id}</p>
+                          </div>
+                          <div className="card-meta-actions">
+                            <span className="score-pill">
+                              {tasks.filter((task) => task.project_id === project.id).length} task(s)
+                            </span>
+                            <button
+                              aria-label={`Delete ${project.name}`}
+                              className="task-card-delete"
+                              disabled={isDeletingProjectId !== null}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDeleteProject(project);
+                              }}
+                              type="button"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                        <p>{project.description ?? "No project description yet."}</p>
+                        <p className="muted">workspace: projects/{project.id}</p>
+                      </article>
+                    ))}
+                  </div>
+                </Panel>
+
+                <Panel
+                  title={selectedProject ? selectedProject.name : "Project Workspace"}
+                  subtitle={
+                    selectedProject
+                      ? `Operate ${selectedProject.id} without mixing it into the rest of the company UI`
+                      : "Create or select a project first"
                   }
                 >
-                  {[
-                    "planner",
-                    "designer",
-                    "architect",
-                    "developer",
-                    "tester",
-                    "reviewer",
-                    "review_agent",
-                  ].map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="template-picker">
-                {roleTemplates.map((template) => (
-                  <button
-                    className={`template-card ${
-                      selectedAgentTemplate?.id === template.id ? "template-card-active" : ""
-                    }`}
-                    key={template.id}
-                    onClick={() =>
-                      setAgentDraft((current) => ({
-                        ...current,
-                        templateId: template.id,
-                      }))
-                    }
-                    type="button"
-                  >
-                    <div className="entity-meta">
-                      <div>
-                        <h4>{template.name}</h4>
-                        <p>{template.summary}</p>
+                  {selectedProject ? (
+                    <div className="detail-block">
+                      <div className="project-hero">
+                        <div>
+                          <h3>{selectedProject.name}</h3>
+                          <p className="muted">{selectedProject.id}</p>
+                          <p className="detail-copy">
+                            {selectedProject.description ?? "No project description yet."}
+                          </p>
+                        </div>
+                        <div className="project-summary-grid">
+                          <div className="mini-stat">
+                            <span>Tasks</span>
+                            <strong>{selectedProjectTasks.length}</strong>
+                          </div>
+                          <div className="mini-stat">
+                            <span>Plan</span>
+                            <strong>{selectedProjectPlan?.status ?? "none"}</strong>
+                          </div>
+                          <div className="mini-stat">
+                            <span>Workspace</span>
+                            <strong>projects/{selectedProject.id}</strong>
+                          </div>
+                        </div>
                       </div>
-                      {template.is_default ? (
-                        <span className="score-pill">default</span>
+
+                      <div className="segmented-control">
+                        {(["summary", "plan", "tasks"] as ProjectPanelTab[]).map((tab) => (
+                          <button
+                            className={`segment ${projectPanelTab === tab ? "segment-active" : ""}`}
+                            key={tab}
+                            onClick={() => setProjectPanelTab(tab)}
+                            type="button"
+                          >
+                            {labelize(tab)}
+                          </button>
+                        ))}
+                      </div>
+
+                      {projectPanelTab === "summary" ? (
+                        <div className="detail-section">
+                          <div className="workflow-summary">
+                            <p>
+                              <strong>Open tasks:</strong>{" "}
+                              {
+                                selectedProjectTasks.filter(
+                                  (task) => task.status === "todo" || task.status === "in_progress",
+                                ).length
+                              }
+                            </p>
+                            <p>
+                              <strong>Done tasks:</strong>{" "}
+                              {selectedProjectTasks.filter((task) => task.status === "done").length}
+                            </p>
+                            <p>
+                              <strong>Failed tasks:</strong>{" "}
+                              {selectedProjectTasks.filter((task) => task.status === "failed").length}
+                            </p>
+                          </div>
+                          <div className="entity-list compact-scroll">
+                            {selectedProjectTasks.map((task) => (
+                              <article className="entity-card" key={task.id}>
+                                <div className="entity-meta">
+                                  <div>
+                                    <h4>{task.title}</h4>
+                                    <p>{task.type}</p>
+                                  </div>
+                                  <span className={`status-pill status-${task.status}`}>{task.status}</span>
+                                </div>
+                                <p>{task.description}</p>
+                                <button
+                                  className="secondary-button"
+                                  onClick={() => {
+                                    setSelectedTaskId(task.id);
+                                    setWorkInspectorTab("summary");
+                                    setActiveView("work");
+                                  }}
+                                  type="button"
+                                >
+                                  Open In Work View
+                                </button>
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {projectPanelTab === "plan" ? (
+                        <div className="detail-section">
+                          <form className="form-stack" onSubmit={handlePitchIdea}>
+                            <label>
+                              Idea title
+                              <input
+                                required
+                                placeholder="Launch a futuristic calculator product"
+                                value={ideaPitchDraft.title}
+                                onChange={(event) =>
+                                  setIdeaPitchDraft((current) => ({
+                                    ...current,
+                                    title: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              Idea description
+                              <textarea
+                                required
+                                rows={4}
+                                placeholder="Describe the idea, goal, and why it matters before execution starts."
+                                value={ideaPitchDraft.description}
+                                onChange={(event) =>
+                                  setIdeaPitchDraft((current) => ({
+                                    ...current,
+                                    description: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <button className="primary-button" disabled={isPitchingIdea} type="submit">
+                              {isPitchingIdea ? "Pitching..." : "Pitch Idea"}
+                            </button>
+                          </form>
+
+                          {selectedProjectPlan ? (
+                            <article className="entity-card">
+                              <div className="entity-meta">
+                                <div>
+                                  <h4>{selectedProjectPlan.idea_title}</h4>
+                                  <p>{selectedProjectPlan.status}</p>
+                                </div>
+                                <span className={`status-pill status-${mapPlanStatus(selectedProjectPlan.status)}`}>
+                                  {selectedProjectPlan.created_task_count}/{selectedProjectPlan.max_total_tasks}
+                                </span>
+                              </div>
+                              <p>{selectedProjectPlan.idea_description}</p>
+                              <p className="muted">
+                                {selectedProjectPlan.planner_summary ??
+                                  "No planner summary yet. Run a planner agent on the idea task."}
+                              </p>
+                              {selectedProjectPlan.feedback ? (
+                                <p className="muted">latest feedback: {selectedProjectPlan.feedback}</p>
+                              ) : null}
+                              <div className="entity-list compact-scroll">
+                                {selectedProjectPlan.items.map((item) => (
+                                  <article className="activity-item" key={item.id}>
+                                    <div className="entity-meta">
+                                      <div>
+                                        <h4>{item.title}</h4>
+                                        <p>
+                                          {item.type} • spawn budget {item.spawn_budget}
+                                        </p>
+                                      </div>
+                                      <span className={`status-pill status-${mapPlanTaskStatus(item.status)}`}>
+                                        {item.status}
+                                      </span>
+                                    </div>
+                                    <p>{item.description}</p>
+                                  </article>
+                                ))}
+                              </div>
+                              <label>
+                                Feedback for changes
+                                <textarea
+                                  rows={3}
+                                  placeholder="Optional: Tell the planner what to change before approving."
+                                  value={ideaPitchDraft.feedback}
+                                  onChange={(event) =>
+                                    setIdeaPitchDraft((current) => ({
+                                      ...current,
+                                      feedback: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <div className="task-actions">
+                                <button
+                                  className="primary-button"
+                                  disabled={
+                                    isSubmittingPlanDecision ||
+                                    !["pending_approval", "changes_requested"].includes(selectedProjectPlan.status)
+                                  }
+                                  onClick={() => void handleApprovePlan(selectedProjectPlan.id)}
+                                  type="button"
+                                >
+                                  Approve Plan
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={
+                                    isSubmittingPlanDecision ||
+                                    !selectedProjectPlan.items.length ||
+                                    !ideaPitchDraft.feedback.trim()
+                                  }
+                                  onClick={() => void handleRequestPlanChanges(selectedProjectPlan.id)}
+                                  type="button"
+                                >
+                                  Request Changes
+                                </button>
+                              </div>
+                            </article>
+                          ) : (
+                            <p className="muted">Pitch an idea for the selected project to start a bounded plan.</p>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {projectPanelTab === "tasks" ? (
+                        <div className="detail-section">
+                          <form className="form-stack" onSubmit={handleCreateTask}>
+                            <label>
+                              Title
+                              <input
+                                required
+                                value={taskDraft.title}
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    title: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              Type
+                              <select
+                                value={taskDraft.type}
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    type: event.target.value as TaskType,
+                                  }))
+                                }
+                              >
+                                {["feature", "bugfix", "research", "review", "ops"].map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              Project
+                              <select
+                                required
+                                value={taskDraft.projectId}
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    projectId: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Select project</option>
+                                {projects.map((project) => (
+                                  <option key={project.id} value={project.id}>
+                                    {project.name} ({project.id})
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              Description
+                              <textarea
+                                required
+                                rows={4}
+                                value={taskDraft.description}
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    description: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <button
+                              className="primary-button"
+                              disabled={isSubmittingTask || projects.length === 0}
+                              type="submit"
+                            >
+                              {isSubmittingTask ? "Creating..." : "Create Task"}
+                            </button>
+                          </form>
+                        </div>
                       ) : null}
                     </div>
-                    <p className="muted template-preview">{template.instructions}</p>
-                  </button>
-                ))}
-              </div>
-              <label>
-                Custom instructions
-                <textarea
-                  rows={4}
-                  placeholder="Optional: Give this agent your own operating style or constraints."
-                  value={agentDraft.instructions}
-                  onChange={(event) =>
-                    setAgentDraft((current) => ({
-                      ...current,
-                      instructions: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <div className="skill-section">
-                <div className="section-heading">
-                  <h3>Skills</h3>
-                  <p>Select extra behaviors to layer onto this agent.</p>
-                </div>
-                <div className="skill-grid">
-                  {sortedSkills.map((skill) => {
-                    const isSelected = agentDraft.skillIds.includes(skill.id);
-                    const isRecommended = skill.recommended_roles.includes(agentDraft.role);
-                    return (
-                      <label
-                        className={`skill-card ${isSelected ? "skill-card-active" : ""}`}
-                        key={skill.id}
-                      >
-                        <input
-                          checked={isSelected}
-                          onChange={() =>
-                            setAgentDraft((current) => ({
-                              ...current,
-                              skillIds: toggleSelection(current.skillIds, skill.id),
-                            }))
-                          }
-                          type="checkbox"
-                        />
-                        <div className="skill-card-copy">
-                          <div className="entity-meta">
-                            <div>
-                              <h4>{skill.name}</h4>
-                              <p>{skill.summary}</p>
-                            </div>
-                            {isRecommended ? (
-                              <span className="score-pill">recommended</span>
-                            ) : null}
+                  ) : (
+                    <p className="muted">Create or select a project first.</p>
+                  )}
+                </Panel>
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "agents" ? (
+            <div className="content-stack">
+              <section className="split-layout split-layout-wide">
+                <Panel
+                  title="Team Roster"
+                  subtitle="The live company roster, with run controls kept visible"
+                >
+                  <div className="entity-list compact-scroll">
+                    {agents.map((agent) => (
+                      <article className="entity-card" key={agent.id}>
+                        <div className="entity-meta">
+                          <div>
+                            <h4>{agent.name}</h4>
+                            <p>
+                              {agent.role} • {findTemplateName(agent.template_id, agentCatalog.templates)}
+                            </p>
                           </div>
-                          <p className="muted">
-                            {skill.source} • {skill.path}
-                          </p>
-                          <pre className="template-preview markdown-preview">{skill.instructions}</pre>
+                          <span className={`status-pill status-${mapAgentStatus(agent.status)}`}>
+                            {agent.status}
+                          </span>
                         </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <button
-                className="primary-button"
-                disabled={isSubmittingAgent || roleTemplates.length === 0}
-                type="submit"
-              >
-                Create Agent
-              </button>
-              {roleTemplates.length === 0 ? (
-                <p className="muted">No templates are available for this role yet.</p>
-              ) : null}
-            </form>
-            <div className="entity-list project-list">
-              {agents.map((agent) => (
-                <article className="entity-card" key={agent.id}>
-                  <div className="entity-meta">
-                    <div>
-                      <h4>{agent.name}</h4>
-                      <p>
-                        {agent.role} • {findTemplateName(agent.template_id, agentCatalog.templates)}
-                      </p>
-                    </div>
-                    <span className={`status-pill status-${mapAgentStatus(agent.status)}`}>
-                      {agent.status}
-                    </span>
+                        <p>{summarizeAgentInstructions(agent.instructions)}</p>
+                        <p className="muted">
+                          skills:{" "}
+                          {agent.skill_ids.length > 0
+                            ? agent.skill_ids
+                                .map((skillId) => findSkillName(skillId, agentCatalog.skills))
+                                .join(", ")
+                            : "none"}
+                        </p>
+                        <p className="muted">
+                          current task:{" "}
+                          {agent.current_task_id
+                            ? tasks.find((task) => task.id === agent.current_task_id)?.title ??
+                              agent.current_task_id
+                            : "none"}
+                        </p>
+                        <div className="task-actions">
+                          <button
+                            className="secondary-button"
+                            disabled={
+                              isRunningAllAgents ||
+                              isRunningAgentId === agent.id ||
+                              isDeletingAgentId === agent.id
+                            }
+                            onClick={() => void handleRunAgent(agent.id)}
+                            type="button"
+                          >
+                            {isRunningAgentId === agent.id ? "Running..." : "Run Once"}
+                          </button>
+                          <button
+                            className="danger-button"
+                            disabled={
+                              isRunningAllAgents ||
+                              isRunningAgentId === agent.id ||
+                              isDeletingAgentId === agent.id
+                            }
+                            onClick={() => void handleDeleteAgent(agent)}
+                            type="button"
+                          >
+                            {isDeletingAgentId === agent.id ? "Deleting..." : "Delete Agent"}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                  <p>{summarizeAgentInstructions(agent.instructions)}</p>
-                  <p className="muted">
-                    skills:{" "}
-                    {agent.skill_ids.length > 0
-                      ? agent.skill_ids
-                          .map((skillId) => findSkillName(skillId, agentCatalog.skills))
-                          .join(", ")
-                      : "none"}
-                  </p>
-                  <p className="muted">
-                    current task:{" "}
-                    {agent.current_task_id
-                      ? tasks.find((task) => task.id === agent.current_task_id)?.title ??
-                        agent.current_task_id
-                      : "none"}
-                  </p>
-                  <div className="task-actions">
-                    <button
-                      className="secondary-button"
-                      disabled={
-                        isRunningAllAgents ||
-                        isRunningAgentId === agent.id ||
-                        isDeletingAgentId === agent.id
-                      }
-                      onClick={() => void handleRunAgent(agent.id)}
-                      type="button"
-                    >
-                      {isRunningAgentId === agent.id ? "Running..." : "Run Once"}
-                    </button>
-                    <button
-                      className="danger-button"
-                      disabled={
-                        isRunningAllAgents ||
-                        isRunningAgentId === agent.id ||
-                        isDeletingAgentId === agent.id
-                      }
-                      onClick={() => void handleDeleteAgent(agent)}
-                      type="button"
-                    >
-                      {isDeletingAgentId === agent.id ? "Deleting..." : "Delete Agent"}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </Panel>
+                </Panel>
 
-          <Panel
-            title="Create Task"
-            subtitle="Create tasks inside an existing project"
-          >
-            <form className="form-stack" onSubmit={handleCreateTask}>
-              <label>
-                Title
-                <input
-                  required
-                  value={taskDraft.title}
-                  onChange={(event) =>
-                    setTaskDraft((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Type
-                <select
-                  value={taskDraft.type}
-                  onChange={(event) =>
-                    setTaskDraft((current) => ({
-                      ...current,
-                      type: event.target.value as TaskType,
-                    }))
-                  }
+                <Panel
+                  title="Agent Studio"
+                  subtitle="Create agents with clearer templates and real SKILL.md attachments"
                 >
-                  {["feature", "bugfix", "research", "review", "ops"].map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Project
-                <select
-                  required
-                  value={taskDraft.projectId}
-                  onChange={(event) =>
-                    setTaskDraft((current) => ({
-                      ...current,
-                      projectId: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Select project</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name} ({project.id})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Description
-                <textarea
-                  required
-                  rows={4}
-                  value={taskDraft.description}
-                  onChange={(event) =>
-                    setTaskDraft((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <button
-                className="primary-button"
-                disabled={isSubmittingTask || projects.length === 0}
-                type="submit"
-              >
-                Create Task
-              </button>
-              {projects.length === 0 ? (
-                <p className="muted">Create a project first, then create tasks inside it.</p>
-              ) : null}
-            </form>
-          </Panel>
-
-          <Panel title="Memory Search" subtitle="Inspect retrieval relevance">
-            <form className="form-stack" onSubmit={handleSearchMemory}>
-              <label>
-                Query
-                <input
-                  value={memoryQuery}
-                  onChange={(event) => setMemoryQuery(event.target.value)}
-                />
-              </label>
-              <label>
-                Strategy
-                <select
-                  value={memoryStrategy}
-                  onChange={(event) =>
-                    setMemoryStrategy(event.target.value as SearchStrategy)
-                  }
-                >
-                  <option value="hybrid">hybrid</option>
-                  <option value="keyword">keyword</option>
-                  <option value="vector">vector</option>
-                </select>
-              </label>
-              <button className="secondary-button" type="submit">
-                Search Memory
-              </button>
-            </form>
-            <div className="entity-list">
-              {memoryResults.map((result) => (
-                <article className="entity-card" key={result.memory_id}>
-                  <div className="entity-meta">
-                    <div>
-                      <h4>{result.summary}</h4>
-                      <p>{result.type}</p>
+                  <form className="form-stack" onSubmit={handleCreateAgent}>
+                    <label>
+                      Agent name
+                      <input
+                        required
+                        placeholder="DesignyBoi"
+                        value={agentDraft.name}
+                        onChange={(event) =>
+                          setAgentDraft((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Role
+                      <select
+                        value={agentDraft.role}
+                        onChange={(event) =>
+                          setAgentDraft((current) => ({
+                            ...current,
+                            role: event.target.value as AgentRole,
+                          }))
+                        }
+                      >
+                        {[
+                          "planner",
+                          "designer",
+                          "architect",
+                          "developer",
+                          "tester",
+                          "reviewer",
+                          "review_agent",
+                        ].map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="skill-section">
+                      <div className="section-heading">
+                        <h3>Template</h3>
+                        <p>Choose the default operating posture for this role.</p>
+                      </div>
+                      <div className="template-picker studio-scroll-section">
+                        {roleTemplates.map((template) => (
+                          <button
+                            className={`template-card ${
+                              selectedAgentTemplate?.id === template.id ? "template-card-active" : ""
+                            }`}
+                            key={template.id}
+                            onClick={() =>
+                              setAgentDraft((current) => ({
+                                ...current,
+                                templateId: template.id,
+                              }))
+                            }
+                            type="button"
+                          >
+                            <div className="entity-meta">
+                              <div>
+                                <h4>{template.name}</h4>
+                                <p>{template.summary}</p>
+                              </div>
+                              {template.is_default ? <span className="score-pill">default</span> : null}
+                            </div>
+                            <p className="muted template-preview">{template.instructions}</p>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <span className="score-pill">
-                      {result.combined_score.toFixed(3)}
-                    </span>
-                  </div>
-                  <p>{result.content}</p>
-                  <p className="muted">
-                    keyword {result.keyword_score.toFixed(3)} • vector{" "}
-                    {result.vector_score.toFixed(3)}
-                  </p>
-                </article>
-              ))}
+                    <label>
+                      Custom instructions
+                      <textarea
+                        rows={4}
+                        placeholder="Optional: Give this agent your own operating style or constraints."
+                        value={agentDraft.instructions}
+                        onChange={(event) =>
+                          setAgentDraft((current) => ({
+                            ...current,
+                            instructions: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <div className="skill-section">
+                      <div className="section-heading">
+                        <h3>Skills</h3>
+                        <p>Select extra behaviors to layer onto this agent.</p>
+                      </div>
+                      <div className="skill-grid studio-scroll-section">
+                        {sortedSkills.map((skill) => {
+                          const isSelected = agentDraft.skillIds.includes(skill.id);
+                          const isRecommended = skill.recommended_roles.includes(agentDraft.role);
+                          return (
+                            <label
+                              className={`skill-card ${isSelected ? "skill-card-active" : ""}`}
+                              key={skill.id}
+                            >
+                              <input
+                                checked={isSelected}
+                                onChange={() =>
+                                  setAgentDraft((current) => ({
+                                    ...current,
+                                    skillIds: toggleSelection(current.skillIds, skill.id),
+                                  }))
+                                }
+                                type="checkbox"
+                              />
+                              <div className="skill-card-copy">
+                                <div className="entity-meta">
+                                  <div>
+                                    <h4>{skill.name}</h4>
+                                    <p>{skill.summary}</p>
+                                  </div>
+                                  {isRecommended ? <span className="score-pill">recommended</span> : null}
+                                </div>
+                                <p className="muted">
+                                  {skill.source} • {skill.path}
+                                </p>
+                                <pre className="template-preview markdown-preview">{skill.instructions}</pre>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      className="primary-button"
+                      disabled={isSubmittingAgent || roleTemplates.length === 0}
+                      type="submit"
+                    >
+                      Create Agent
+                    </button>
+                    {roleTemplates.length === 0 ? (
+                      <p className="muted">No templates are available for this role yet.</p>
+                    ) : null}
+                  </form>
+                </Panel>
+              </section>
             </div>
-          </Panel>
+          ) : null}
         </div>
-      </section>
+      </div>
     </main>
   );
 }
