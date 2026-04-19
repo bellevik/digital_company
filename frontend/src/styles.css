@@ -909,15 +909,11 @@ pre {
   overflow: hidden;
   image-rendering: pixelated;
   transform: translate(-50%, -50%);
+  background-repeat: no-repeat;
   filter:
     drop-shadow(0 10px 16px rgba(0, 0, 0, 0.28))
     saturate(1.08);
   pointer-events: none;
-}
-
-.studio-prop-image {
-  position: absolute;
-  image-rendering: pixelated;
 }
 
 .studio-agent-card {
@@ -966,9 +962,10 @@ pre {
 
 .studio-agent-sprite,
 .studio-agent-portrait-sprite {
-  width: 2.7rem;
-  height: 2.7rem;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
+  transform: scale(1.7);
+  transform-origin: center;
 }
 
 .studio-agent-card strong {

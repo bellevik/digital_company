@@ -102,6 +102,9 @@ type StudioAgentView = {
   zone: StudioZoneDefinition;
   position: { x: number; y: number };
   spritePath: string;
+  spriteSheetWidth: number;
+  spriteSheetHeight: number;
+  spriteFrame: { x: number; y: number; w: number; h: number };
   accent: string;
   accentLabel: string;
   destinationLabel: string;
@@ -1621,20 +1624,11 @@ export default function App() {
                           height: `${prop.h}px`,
                           zIndex: prop.zIndex ?? 1,
                           opacity: prop.opacity ?? 0.96,
+                          backgroundImage: `url(${prop.imagePath})`,
+                          backgroundSize: `${prop.sourceWidth}px ${prop.sourceHeight}px`,
+                          backgroundPosition: `${-prop.cropX}px ${-prop.cropY}px`,
                         }}
-                      >
-                        <img
-                          alt={prop.label}
-                          className="studio-prop-image"
-                          src={prop.imagePath}
-                          style={{
-                            width: `${prop.sourceWidth}px`,
-                            height: `${prop.sourceHeight}px`,
-                            left: `${-prop.cropX}px`,
-                            top: `${-prop.cropY}px`,
-                          }}
-                        />
-                      </div>
+                      />
                     ))}
 
                     {studioAgents.map((entry) => (
@@ -1655,10 +1649,16 @@ export default function App() {
                         type="button"
                       >
                         <div className="studio-agent-sprite-shell">
-                          <img
-                            alt={`${entry.agent.name} sprite`}
+                          <div
+                            aria-label={`${entry.agent.name} sprite`}
                             className="studio-agent-sprite"
-                            src={entry.spritePath}
+                            style={{
+                              backgroundImage: `url(${entry.spritePath})`,
+                              backgroundSize: `${entry.spriteSheetWidth}px ${entry.spriteSheetHeight}px`,
+                              backgroundPosition: `${-entry.spriteFrame.x}px ${-entry.spriteFrame.y}px`,
+                              width: `${entry.spriteFrame.w}px`,
+                              height: `${entry.spriteFrame.h}px`,
+                            }}
                           />
                         </div>
                         <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
@@ -1695,10 +1695,16 @@ export default function App() {
                         </div>
                         <div className="studio-agent-focus">
                           <div className="studio-agent-portrait">
-                            <img
-                              alt={`${selectedStudioAgent.agent.name} portrait`}
+                            <div
+                              aria-label={`${selectedStudioAgent.agent.name} portrait`}
                               className="studio-agent-portrait-sprite"
-                              src={selectedStudioAgent.spritePath}
+                              style={{
+                                backgroundImage: `url(${selectedStudioAgent.spritePath})`,
+                                backgroundSize: `${selectedStudioAgent.spriteSheetWidth}px ${selectedStudioAgent.spriteSheetHeight}px`,
+                                backgroundPosition: `${-selectedStudioAgent.spriteFrame.x}px ${-selectedStudioAgent.spriteFrame.y}px`,
+                                width: `${selectedStudioAgent.spriteFrame.w}px`,
+                                height: `${selectedStudioAgent.spriteFrame.h}px`,
+                              }}
                             />
                           </div>
                           <div className="workflow-summary">
@@ -3178,41 +3184,72 @@ const STUDIO_ROLE_HOME: Record<AgentRole, StudioZoneKey> = {
   review_agent: "review_deck",
 };
 
-const STUDIO_ROLE_SPRITES: Record<AgentRole, { path: string; accent: string; accentLabel: string }> = {
+const STUDIO_ROLE_SPRITES: Record<
+  AgentRole,
+  {
+    path: string;
+    accent: string;
+    accentLabel: string;
+    sheetWidth: number;
+    sheetHeight: number;
+    frame: { x: number; y: number; w: number; h: number };
+  }
+> = {
   planner: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Mage-Cyan.png",
     accent: "#55d6ff",
     accentLabel: "cyan strategy glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   designer: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Archer-Purple.png",
     accent: "#cf79ff",
     accentLabel: "violet design glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   architect: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Mage-Red.png",
     accent: "#ff7285",
     accentLabel: "red systems glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   developer: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Soldier-Blue.png",
     accent: "#63a8ff",
     accentLabel: "blue terminal glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   tester: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Soldier-Yellow.png",
     accent: "#f0d166",
     accentLabel: "amber QA glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   reviewer: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Archer-Green.png",
     accent: "#67db9e",
     accentLabel: "green review glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
   review_agent: {
     path: "/studio-assets/vendor/puny-characters/Puny-Characters/Warrior-Red.png",
     accent: "#ff8f66",
     accentLabel: "orange release glow",
+    sheetWidth: 768,
+    sheetHeight: 256,
+    frame: { x: 0, y: 0, w: 32, h: 32 },
   },
 };
 
@@ -3356,6 +3393,9 @@ function buildStudioAgents({
       zone,
       position,
       spritePath: sprite.path,
+      spriteSheetWidth: sprite.sheetWidth,
+      spriteSheetHeight: sprite.sheetHeight,
+      spriteFrame: sprite.frame,
       accent: sprite.accent,
       accentLabel: sprite.accentLabel,
       destinationLabel: describeStudioDestination(agent, task, projects, zone),
