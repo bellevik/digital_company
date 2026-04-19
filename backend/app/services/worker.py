@@ -27,7 +27,7 @@ from app.services.project_workspace import ProjectWorkspaceService
 from app.services.project_plans import ProjectPlanService
 from app.services.projects import ProjectService
 from app.services.prompting import get_role_profile, build_prompt
-from app.services.task_routing import task_matches_role
+from app.services.task_routing import agent_task_match_score, task_matches_agent
 from app.services.workflow import WorkflowService
 
 logger = logging.getLogger(__name__)
@@ -86,25 +86,41 @@ class WorkerService:
 
     def _claim_next_task(self, *, agent: Agent) -> ClaimedTaskContext | None:
         supported_task_types = get_role_profile(agent.role).supported_task_types
-        candidate_ids = list(
+        candidates = list(
             self._db.scalars(
-                select(Task.id)
+                select(Task)
                 .where(
                     Task.status == TaskStatus.TODO,
                     Task.assigned_agent_id.is_(None),
                     Task.type.in_(supported_task_types),
                 )
                 .order_by(Task.created_at.asc())
-                .limit(10)
+                .limit(20)
             ).all()
         )
+        ranked_candidates = sorted(
+            candidates,
+            key=lambda task: (
+                -agent_task_match_score(
+                    title=task.title,
+                    description=task.description,
+                    task_type=task.type,
+                    role=agent.role,
+                    template_id=agent.template_id,
+                ),
+                task.created_at,
+            ),
+        )
 
-        for task_id in candidate_ids:
+        for preview_task in ranked_candidates:
             try:
-                preview_task = self._db.get(Task, task_id)
-                if preview_task is None or not task_matches_role(task=preview_task, role=agent.role):
+                if preview_task is None or not task_matches_agent(
+                    task=preview_task,
+                    role=agent.role,
+                    template_id=agent.template_id,
+                ):
                     continue
-                task = claim_task(db=self._db, task_id=task_id, agent_id=agent.id)
+                task = claim_task(db=self._db, task_id=preview_task.id, agent_id=agent.id)
                 prompt = build_prompt(
                     agent=agent,
                     task=task,

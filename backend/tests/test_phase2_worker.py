@@ -363,6 +363,102 @@ def test_run_all_agents_runs_each_agent_once_with_matching_tasks(client: TestCli
     app.dependency_overrides.pop(execution_adapter_dependency, None)
 
 
+def test_template_specialists_route_bugfix_to_refactor_specialist(client: TestClient) -> None:
+    adapter = FakeExecutionAdapter(
+        stdout='{"summary":"fixed","memory_summary":"fixed","memory_content":"fixed","artifact_paths":["fix.md"],"follow_up_tasks":[]}',
+        files_to_create=["fix.md"],
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    prototype = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "prototype-bugfix",
+            "role": "developer",
+            "template_id": "developer_prototype_sprinter",
+        },
+    ).json()
+    refactor = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "refactor-bugfix",
+            "role": "developer",
+            "template_id": "developer_refactor_specialist",
+        },
+    ).json()
+    bugfix_task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Fix calculator buttons not responding",
+            "description": "Resolve the broken click handling and regressions causing runtime errors.",
+            "type": "bugfix",
+            "project_id": "futurecalc",
+        },
+    ).json()
+
+    prototype_response = client.post(f"/api/v1/agents/{prototype['id']}/work")
+    refactor_response = client.post(f"/api/v1/agents/{refactor['id']}/work")
+
+    assert prototype_response.status_code == 200
+    assert prototype_response.json()["outcome"] == "idle"
+    assert refactor_response.status_code == 200
+    assert refactor_response.json()["outcome"] == "completed"
+    assert refactor_response.json()["task_id"] == bugfix_task["id"]
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
+def test_run_all_prefers_specialist_developer_for_bugfix(client: TestClient) -> None:
+    adapter = FakeExecutionAdapter(
+        stdout='{"summary":"fixed","memory_summary":"fixed","memory_content":"fixed","artifact_paths":["fix.md"],"follow_up_tasks":[]}',
+        files_to_create=["fix.md"],
+    )
+    app.dependency_overrides[execution_adapter_dependency] = lambda: adapter
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    prototype = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "prototype-batch-bugfix",
+            "role": "developer",
+            "template_id": "developer_prototype_sprinter",
+        },
+    ).json()
+    refactor = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "refactor-batch-bugfix",
+            "role": "developer",
+            "template_id": "developer_refactor_specialist",
+        },
+    ).json()
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Fix calculator buttons not responding",
+            "description": "Resolve the broken click handling and regressions causing runtime errors.",
+            "type": "bugfix",
+            "project_id": "futurecalc",
+        },
+    )
+
+    response = client.post("/api/v1/agents/run-all")
+
+    assert response.status_code == 200
+    payload = response.json()
+    prototype_result = next(item for item in payload["results"] if item["agent_id"] == prototype["id"])
+    refactor_result = next(item for item in payload["results"] if item["agent_id"] == refactor["id"])
+    assert prototype_result["outcome"] == "idle"
+    assert refactor_result["outcome"] == "completed"
+
+    app.dependency_overrides.pop(execution_adapter_dependency, None)
+
+
 def test_plan_bounded_followups_respect_budget(client: TestClient) -> None:
     client.post(
         "/api/v1/projects",
