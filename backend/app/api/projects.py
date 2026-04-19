@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import db_session_dependency
 from app.config import get_settings
-from app.schemas.project import ProjectCreate, ProjectRead, ProjectRuntimeActionResponse
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectRead,
+    ProjectResetResponse,
+    ProjectRuntimeActionResponse,
+)
 from app.services.projects import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -51,6 +56,21 @@ def delete_project(project_id: str, db: Session = Depends(db_session_dependency)
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{project_id}/reset", response_model=ProjectResetResponse)
+def reset_project(project_id: str, db: Session = Depends(db_session_dependency)) -> ProjectResetResponse:
+    try:
+        return ProjectService(db=db, settings=get_settings()).reset_project(project_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project_not_found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="project_reset_failed",
+        ) from exc
 
 
 @router.get("/{project_id}/runtime", response_model=ProjectRuntimeActionResponse)

@@ -4,9 +4,22 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.models.agent import Agent
+from app.models.common import AgentStatus
+from app.models.memory import Memory
 from app.models.project import Project
+from app.models.project_plan import ProjectPlan
+from app.models.review_decision import ReviewDecision
 from app.models.task import Task
-from app.schemas.project import ProjectCreate, ProjectRead, ProjectRuntimeRead
+from app.models.task_event import TaskEvent
+from app.models.task_run import TaskRun
+from app.models.task_workflow import TaskWorkflow
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectRead,
+    ProjectResetResponse,
+    ProjectRuntimeRead,
+)
 from app.services.project_runtime import ProjectRuntimeService
 from app.services.project_workspace import ProjectWorkspaceService
 
@@ -115,6 +128,83 @@ class ProjectService:
         self._db.delete(project)
         self._db.commit()
         self._workspace_service.delete_project_directory(project.id)
+
+    def reset_project(self, project_id: str) -> ProjectResetResponse:
+        normalized_project_id = self._workspace_service.normalize_project_id(project_id)
+        if normalized_project_id is None:
+            raise LookupError("project_not_found")
+
+        project = self._db.get(Project, normalized_project_id)
+        if project is None:
+            raise LookupError("project_not_found")
+
+        runtime = self._runtime_service.describe_project(project_id=project.id)
+        if runtime.project_type == "web" and runtime.runtime_status == "running":
+            self._runtime_service.stop(project=project)
+
+        deleted_plan_count = self._db.scalar(
+            select(func.count()).select_from(ProjectPlan).where(ProjectPlan.project_id == project.id)
+        ) or 0
+
+        from app.services.project_plans import ProjectPlanService
+
+        plan_service = ProjectPlanService(db=self._db, project_service=self)
+        tasks = list(
+            self._db.scalars(select(Task).where(Task.project_id == project.id)).all()
+        )
+        deleted_task_count = 0
+        deleted_memory_count = 0
+
+        for task in tasks:
+            agent_query = select(Agent).where(Agent.current_task_id == task.id)
+            if task.assigned_agent_id is not None:
+                agent_query = select(Agent).where(
+                    (Agent.current_task_id == task.id) | (Agent.id == task.assigned_agent_id)
+                )
+            for agent in self._db.scalars(agent_query).all():
+                if agent.current_task_id == task.id:
+                    agent.current_task_id = None
+                if agent.status == AgentStatus.BUSY:
+                    agent.status = AgentStatus.IDLE
+
+            for memory in self._db.scalars(
+                select(Memory).where(Memory.source_task_id == task.id)
+            ).all():
+                self._db.delete(memory)
+                deleted_memory_count += 1
+
+            for review_decision in self._db.scalars(
+                select(ReviewDecision).where(ReviewDecision.task_id == task.id)
+            ).all():
+                self._db.delete(review_decision)
+            for workflow in self._db.scalars(
+                select(TaskWorkflow).where(TaskWorkflow.task_id == task.id)
+            ).all():
+                self._db.delete(workflow)
+            for task_run in self._db.scalars(
+                select(TaskRun).where(TaskRun.task_id == task.id)
+            ).all():
+                self._db.delete(task_run)
+            for task_event in self._db.scalars(
+                select(TaskEvent).where(TaskEvent.task_id == task.id)
+            ).all():
+                self._db.delete(task_event)
+
+            plan_service.cancel_task_link(task=task)
+            self._db.delete(task)
+            deleted_task_count += 1
+
+        self._db.delete(project)
+        self._db.commit()
+        self._workspace_service.delete_project_directory(project.id)
+
+        return ProjectResetResponse(
+            project_id=project.id,
+            message="project_reset",
+            deleted_task_count=deleted_task_count,
+            deleted_memory_count=deleted_memory_count,
+            deleted_plan_count=deleted_plan_count,
+        )
 
     def serialize_project(self, project: Project) -> ProjectRead:
         runtime = self._runtime_service.bootstrap_project(project=project)

@@ -59,6 +59,14 @@ type Project = {
   runtime: ProjectRuntime;
 };
 
+type ProjectResetResponse = {
+  project_id: string;
+  message: string;
+  deleted_task_count: number;
+  deleted_memory_count: number;
+  deleted_plan_count: number;
+};
+
 type ProjectPlanTask = {
   id: string;
   parent_plan_task_id: string | null;
@@ -369,6 +377,7 @@ export default function App() {
   const [isRunningAgentId, setIsRunningAgentId] = useState<string | null>(null);
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
   const [isDeletingProjectId, setIsDeletingProjectId] = useState<string | null>(null);
+  const [isResettingProjectId, setIsResettingProjectId] = useState<string | null>(null);
   const [isPitchingIdea, setIsPitchingIdea] = useState(false);
   const [isSubmittingPlanDecision, setIsSubmittingPlanDecision] = useState(false);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
@@ -742,6 +751,40 @@ export default function App() {
       );
     } finally {
       setIsDeletingProjectId(null);
+    }
+  }
+
+  async function handleResetProject(project: Project) {
+    const shouldReset = window.confirm(
+      `Delete project "${project.name}" completely and start over? This removes all project tasks, plans, task history, project-linked memory, and the workspace folder.`,
+    );
+    if (!shouldReset) {
+      return;
+    }
+
+    setIsResettingProjectId(project.id);
+    try {
+      const payload = await apiPost<ProjectResetResponse>(`/api/v1/projects/${project.id}/reset`, {});
+      if (selectedProjectId === project.id) {
+        setSelectedProjectId(null);
+      }
+      if (taskDraft.projectId === project.id) {
+        setTaskDraft((current) => ({ ...current, projectId: "" }));
+      }
+      await refreshDashboard();
+      pushToast(
+        setToast,
+        "success",
+        `Project reset. Removed ${payload.deleted_task_count} task(s), ${payload.deleted_memory_count} memory item(s), and ${payload.deleted_plan_count} plan(s).`,
+      );
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to reset project.",
+      );
+    } finally {
+      setIsResettingProjectId(null);
     }
   }
 
@@ -1953,6 +1996,16 @@ export default function App() {
                                 </button>
                               </>
                             ) : null}
+                            <button
+                              className="danger-button"
+                              disabled={isResettingProjectId !== null}
+                              onClick={() => void handleResetProject(selectedProject)}
+                              type="button"
+                            >
+                              {isResettingProjectId === selectedProject.id
+                                ? "Resetting..."
+                                : "Start Over"}
+                            </button>
                           </div>
                           <div className="workflow-summary">
                             <p>

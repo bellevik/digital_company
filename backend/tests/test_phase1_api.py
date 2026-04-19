@@ -132,6 +132,56 @@ def test_delete_project_rejects_projects_with_tasks(client: TestClient) -> None:
     assert delete_response.json()["detail"] == "project_has_tasks"
 
 
+def test_reset_project_completely_removes_tasks_memory_plans_and_workspace(
+    client: TestClient,
+    projects_root,
+) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={"id": "futurecalc", "name": "FutureCalc", "description": "Calculator project."},
+    )
+    task = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Build calculator",
+            "description": "Implement calculator UI.",
+            "type": "feature",
+            "project_id": "futurecalc",
+        },
+    ).json()
+    client.post(
+        "/api/v1/memory",
+        json={
+            "type": "task_result",
+            "summary": "Old calculator context",
+            "content": "Should be removed when starting over.",
+            "source_task_id": task["id"],
+        },
+    )
+    plan = client.post(
+        "/api/v1/project-plans/projects/futurecalc/pitch",
+        json={
+            "idea_title": "Futuristic web calculator",
+            "idea_description": "Plan a bounded calculator app.",
+        },
+    ).json()
+
+    reset_response = client.post("/api/v1/projects/futurecalc/reset")
+
+    assert reset_response.status_code == 200
+    payload = reset_response.json()
+    assert payload["project_id"] == "futurecalc"
+    assert payload["message"] == "project_reset"
+    assert payload["deleted_task_count"] == 2
+    assert payload["deleted_memory_count"] == 1
+    assert payload["deleted_plan_count"] == 1
+    assert client.get("/api/v1/projects").json() == []
+    assert client.get("/api/v1/tasks").json() == []
+    assert client.get("/api/v1/memory").json() == []
+    assert client.get("/api/v1/project-plans").json() == []
+    assert not (projects_root / "futurecalc").exists()
+
+
 def test_pitch_idea_creates_draft_plan_and_idea_task(client: TestClient) -> None:
     client.post(
         "/api/v1/projects",

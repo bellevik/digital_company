@@ -39,3 +39,11 @@ class ProjectRuntimeActionResponse(BaseModel):
     project_id: str
     message: str
     runtime: ProjectRuntimeRead
+
+
+class ProjectResetResponse(BaseModel):
+    project_id: str
+    message: str
+    deleted_task_count: int
+    deleted_memory_count: int
+    deleted_plan_count: int
