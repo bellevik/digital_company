@@ -3110,13 +3110,13 @@ const STUDIO_ZONES: Record<StudioZoneKey, StudioZoneDefinition> = {
 };
 
 const STUDIO_CORRIDORS: StudioCorridor[] = [
-  { key: "top-run", x: 19, y: 28, w: 62, h: 4, variant: "main" },
-  { key: "mid-run", x: 19, y: 53, w: 62, h: 4, variant: "main" },
-  { key: "bottom-run", x: 19, y: 80, w: 62, h: 4, variant: "main" },
-  { key: "left-spine", x: 18, y: 18, w: 4, h: 67, variant: "main" },
-  { key: "center-spine", x: 48, y: 18, w: 4, h: 67, variant: "main" },
-  { key: "right-spine", x: 78, y: 18, w: 4, h: 67, variant: "main" },
-  { key: "social-spur", x: 16, y: 80, w: 4, h: 12, variant: "spur" },
+  { key: "top-run", x: 20, y: 29, w: 60, h: 2.6, variant: "main" },
+  { key: "mid-run", x: 20, y: 56, w: 60, h: 2.6, variant: "main" },
+  { key: "left-spine", x: 19, y: 29, w: 2.6, h: 43, variant: "main" },
+  { key: "center-spine", x: 48.7, y: 29, w: 2.6, h: 43, variant: "main" },
+  { key: "right-spine", x: 78.4, y: 29, w: 2.6, h: 43, variant: "main" },
+  { key: "social-link", x: 17, y: 85.4, w: 9, h: 2.4, variant: "spur" },
+  { key: "social-spur", x: 19, y: 72, w: 2.4, h: 14.8, variant: "spur" },
 ];
 
 const STUDIO_ZONE_SLOTS: Record<StudioZoneKey, Array<{ x: number; y: number }>> = {
