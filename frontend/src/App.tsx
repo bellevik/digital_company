@@ -109,6 +109,22 @@ type StudioAgentView = {
   walkDelay: number;
 };
 
+type StudioProp = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  imagePath: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  cropX: number;
+  cropY: number;
+  zIndex?: number;
+  opacity?: number;
+};
+
 type ProjectPlanTask = {
   id: string;
   parent_plan_task_id: string | null;
@@ -1591,6 +1607,34 @@ export default function App() {
                           {studioAgents.filter((entry) => entry.zone.key === zone.key).length} present
                         </span>
                       </article>
+                    ))}
+
+                    {STUDIO_PROPS.map((prop) => (
+                      <div
+                        aria-label={prop.label}
+                        className="studio-prop"
+                        key={prop.id}
+                        style={{
+                          left: `${prop.x}%`,
+                          top: `${prop.y}%`,
+                          width: `${prop.w}px`,
+                          height: `${prop.h}px`,
+                          zIndex: prop.zIndex ?? 1,
+                          opacity: prop.opacity ?? 0.96,
+                        }}
+                      >
+                        <img
+                          alt={prop.label}
+                          className="studio-prop-image"
+                          src={prop.imagePath}
+                          style={{
+                            width: `${prop.sourceWidth}px`,
+                            height: `${prop.sourceHeight}px`,
+                            left: `${-prop.cropX}px`,
+                            top: `${-prop.cropY}px`,
+                          }}
+                        />
+                      </div>
                     ))}
 
                     {studioAgents.map((entry) => (
@@ -3171,6 +3215,115 @@ const STUDIO_ROLE_SPRITES: Record<AgentRole, { path: string; accent: string; acc
     accentLabel: "orange release glow",
   },
 };
+
+const STUDIO_PROPS: StudioProp[] = [
+  {
+    id: "strategy-table",
+    label: "strategy table",
+    x: 13,
+    y: 13,
+    w: 132,
+    h: 54,
+    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
+    sourceWidth: 457,
+    sourceHeight: 305,
+    cropX: 34,
+    cropY: 0,
+  },
+  {
+    id: "designer-lounge",
+    label: "design lounge",
+    x: 72,
+    y: 19,
+    w: 122,
+    h: 64,
+    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
+    sourceWidth: 457,
+    sourceHeight: 305,
+    cropX: 0,
+    cropY: 126,
+  },
+  {
+    id: "library-shelves",
+    label: "library shelves",
+    x: 69,
+    y: 66,
+    w: 138,
+    h: 88,
+    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
+    sourceWidth: 457,
+    sourceHeight: 305,
+    cropX: 0,
+    cropY: 221,
+  },
+  {
+    id: "dev-terminal-wall",
+    label: "developer terminals",
+    x: 10,
+    y: 23,
+    w: 168,
+    h: 86,
+    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
+    sourceWidth: 832,
+    sourceHeight: 512,
+    cropX: 455,
+    cropY: 250,
+  },
+  {
+    id: "qa-console",
+    label: "qa console",
+    x: 42,
+    y: 67,
+    w: 142,
+    h: 78,
+    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
+    sourceWidth: 832,
+    sourceHeight: 512,
+    cropX: 446,
+    cropY: 352,
+  },
+  {
+    id: "server-racks",
+    label: "server racks",
+    x: 42,
+    y: 13,
+    w: 164,
+    h: 88,
+    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
+    sourceWidth: 832,
+    sourceHeight: 512,
+    cropX: 438,
+    cropY: 236,
+  },
+  {
+    id: "review-gate",
+    label: "review gate",
+    x: 14,
+    y: 68,
+    w: 126,
+    h: 76,
+    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
+    sourceWidth: 832,
+    sourceHeight: 512,
+    cropX: 632,
+    cropY: 242,
+  },
+  {
+    id: "atrium-floor",
+    label: "atrium floor",
+    x: 40,
+    y: 37,
+    w: 152,
+    h: 108,
+    imagePath: "/studio-assets/vendor/rgs-tileset/Free CC0 Top Down Tileset Pixel Art/Tilesets/tileset_full.png",
+    sourceWidth: 256,
+    sourceHeight: 400,
+    cropX: 0,
+    cropY: 0,
+    opacity: 0.75,
+    zIndex: 1,
+  },
+];
 
 function buildStudioAgents({
   agents,
