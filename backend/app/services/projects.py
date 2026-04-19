@@ -6,19 +6,25 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.models.project import Project
 from app.models.task import Task
-from app.schemas.project import ProjectCreate
+from app.schemas.project import ProjectCreate, ProjectRead, ProjectRuntimeRead
+from app.services.project_runtime import ProjectRuntimeService
 from app.services.project_workspace import ProjectWorkspaceService
 
 
 class ProjectService:
     def __init__(self, *, db: Session, settings: Settings):
         self._db = db
+        self._settings = settings
         self._workspace_service = ProjectWorkspaceService(settings=settings)
+        self._runtime_service = ProjectRuntimeService(settings=settings)
 
-    def list_projects(self) -> list[Project]:
-        return list(self._db.scalars(select(Project).order_by(Project.created_at.asc())).all())
+    def list_projects(self) -> list[ProjectRead]:
+        return [
+            self.serialize_project(project)
+            for project in self._db.scalars(select(Project).order_by(Project.created_at.asc())).all()
+        ]
 
-    def create_project(self, payload: ProjectCreate) -> Project:
+    def create_project(self, payload: ProjectCreate) -> ProjectRead:
         project_id = self._workspace_service.normalize_project_id(payload.id)
         if project_id is None:
             raise ValueError("project id is required")
@@ -41,7 +47,8 @@ class ProjectService:
         self._workspace_service.ensure_project_directory(project.id)
         self._db.commit()
         self._db.refresh(project)
-        return project
+        self._runtime_service.bootstrap_project(project=project, requested_type=payload.project_type)
+        return self.serialize_project(project)
 
     def require_project(self, project_id: str | None) -> str | None:
         normalized_project_id = self._workspace_service.normalize_project_id(project_id)
@@ -78,6 +85,15 @@ class ProjectService:
         self._workspace_service.ensure_project_directory(project.id)
         return project
 
+    def get_project(self, project_id: str) -> Project:
+        normalized_project_id = self._workspace_service.normalize_project_id(project_id)
+        if normalized_project_id is None:
+            raise LookupError("project_not_found")
+        project = self._db.get(Project, normalized_project_id)
+        if project is None:
+            raise LookupError("project_not_found")
+        return project
+
     def delete_project(self, project_id: str) -> None:
         normalized_project_id = self._workspace_service.normalize_project_id(project_id)
         if normalized_project_id is None:
@@ -99,6 +115,31 @@ class ProjectService:
         self._db.delete(project)
         self._db.commit()
         self._workspace_service.delete_project_directory(project.id)
+
+    def serialize_project(self, project: Project) -> ProjectRead:
+        runtime = self._runtime_service.bootstrap_project(project=project)
+        return ProjectRead(
+            id=project.id,
+            name=project.name,
+            description=project.description,
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+            runtime=ProjectRuntimeRead(
+                project_type=runtime.project_type,
+                framework=runtime.framework,
+                runtime_status=runtime.runtime_status,
+                port=runtime.port,
+                pid=runtime.pid,
+                proxy_path=runtime.proxy_path,
+                local_url=runtime.local_url,
+                log_path=runtime.log_path,
+                scripts=runtime.scripts,
+            ),
+        )
+
+    @property
+    def runtime_service(self) -> ProjectRuntimeService:
+        return self._runtime_service
 
 
 def _default_project_name(project_id: str) -> str:

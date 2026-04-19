@@ -35,6 +35,20 @@ type PlanStatus =
   | "approved"
   | "completed";
 type PlanTaskStatus = "proposed" | "queued" | "done" | "failed" | "cancelled";
+type ProjectType = "generic" | "web";
+type ProjectRuntimeStatus = "running" | "stopped" | "not_configured";
+
+type ProjectRuntime = {
+  project_type: ProjectType;
+  framework: string | null;
+  runtime_status: ProjectRuntimeStatus;
+  port: number | null;
+  pid: number | null;
+  proxy_path: string | null;
+  local_url: string | null;
+  log_path: string | null;
+  scripts: Record<string, string | null>;
+};
 
 type Project = {
   id: string;
@@ -42,6 +56,7 @@ type Project = {
   description: string | null;
   created_at: string;
   updated_at: string;
+  runtime: ProjectRuntime;
 };
 
 type ProjectPlanTask = {
@@ -291,6 +306,7 @@ const defaultProjectDraft = {
   id: "",
   name: "",
   description: "",
+  projectType: "web" as ProjectType,
 };
 
 const defaultAgentDraft = {
@@ -345,6 +361,7 @@ export default function App() {
   const [memoryStrategy, setMemoryStrategy] = useState<SearchStrategy>("hybrid");
   const [memoryResults, setMemoryResults] = useState<MemorySearchResult[]>([]);
   const [isSubmittingProject, setIsSubmittingProject] = useState(false);
+  const [projectRuntimeActionId, setProjectRuntimeActionId] = useState<string | null>(null);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [isSubmittingAgent, setIsSubmittingAgent] = useState(false);
   const [isSeedingStartupTeam, setIsSeedingStartupTeam] = useState(false);
@@ -591,6 +608,7 @@ export default function App() {
         id: projectDraft.id.trim(),
         name: projectDraft.name.trim(),
         description: projectDraft.description.trim() || null,
+        project_type: projectDraft.projectType,
       });
       setProjectDraft(defaultProjectDraft);
       setSelectedProjectId(created.id);
@@ -724,6 +742,33 @@ export default function App() {
       );
     } finally {
       setIsDeletingProjectId(null);
+    }
+  }
+
+  async function handleProjectRuntimeAction(
+    project: Project,
+    action: "start" | "stop" | "restart",
+  ) {
+    setProjectRuntimeActionId(`${project.id}:${action}`);
+    try {
+      const payload = await apiPost<{ message: string; runtime: ProjectRuntime }>(
+        `/api/v1/projects/${project.id}/runtime/${action}`,
+        {},
+      );
+      await refreshDashboard();
+      pushToast(
+        setToast,
+        "success",
+        `${project.name}: ${payload.message.replace(/_/g, " ")}.`,
+      );
+    } catch (error) {
+      pushToast(
+        setToast,
+        "error",
+        error instanceof Error ? error.message : "Unable to change project runtime.",
+      );
+    } finally {
+      setProjectRuntimeActionId(null);
     }
   }
 
@@ -1710,22 +1755,37 @@ export default function App() {
                         }
                       />
                     </label>
-                    <label>
-                      Description
-                      <textarea
-                        rows={3}
-                        value={projectDraft.description}
+              <label>
+                Description
+                <textarea
+                  rows={3}
+                  value={projectDraft.description}
                         onChange={(event) =>
                           setProjectDraft((current) => ({
                             ...current,
                             description: event.target.value,
                           }))
-                        }
-                      />
-                    </label>
-                    <button className="primary-button" disabled={isSubmittingProject} type="submit">
-                      {isSubmittingProject ? "Creating..." : "Create Project"}
-                    </button>
+                  }
+                />
+              </label>
+              <label>
+                Project type
+                <select
+                  value={projectDraft.projectType}
+                  onChange={(event) =>
+                    setProjectDraft((current) => ({
+                      ...current,
+                      projectType: event.target.value as ProjectType,
+                    }))
+                  }
+                >
+                  <option value="web">web app</option>
+                  <option value="generic">generic</option>
+                </select>
+              </label>
+              <button className="primary-button" disabled={isSubmittingProject} type="submit">
+                {isSubmittingProject ? "Creating..." : "Create Project"}
+              </button>
                   </form>
 
                   <div className="entity-list project-list">
@@ -1741,7 +1801,10 @@ export default function App() {
                         <div className="entity-meta">
                           <div>
                             <h4>{project.name}</h4>
-                            <p>{project.id}</p>
+                            <p>
+                              {project.id} • {project.runtime.project_type}
+                              {project.runtime.framework ? ` • ${project.runtime.framework}` : ""}
+                            </p>
                           </div>
                           <div className="card-meta-actions">
                             <span className="score-pill">
@@ -1762,7 +1825,9 @@ export default function App() {
                           </div>
                         </div>
                         <p>{project.description ?? "No project description yet."}</p>
-                        <p className="muted">workspace: projects/{project.id}</p>
+                        <p className="muted">
+                          workspace: projects/{project.id} • runtime: {project.runtime.runtime_status}
+                        </p>
                       </article>
                     ))}
                   </div>
@@ -1788,6 +1853,15 @@ export default function App() {
                         </div>
                         <div className="project-summary-grid">
                           <div className="mini-stat">
+                            <span>Type</span>
+                            <strong>
+                              {selectedProject.runtime.project_type}
+                              {selectedProject.runtime.framework
+                                ? ` / ${selectedProject.runtime.framework}`
+                                : ""}
+                            </strong>
+                          </div>
+                          <div className="mini-stat">
                             <span>Tasks</span>
                             <strong>{selectedProjectTasks.length}</strong>
                           </div>
@@ -1798,6 +1872,10 @@ export default function App() {
                           <div className="mini-stat">
                             <span>Workspace</span>
                             <strong>projects/{selectedProject.id}</strong>
+                          </div>
+                          <div className="mini-stat">
+                            <span>Runtime</span>
+                            <strong>{selectedProject.runtime.runtime_status}</strong>
                           </div>
                         </div>
                       </div>
@@ -1817,7 +1895,89 @@ export default function App() {
 
                       {projectPanelTab === "summary" ? (
                         <div className="detail-section">
+                          <div className="task-actions">
+                            {selectedProject.runtime.project_type === "web" ? (
+                              <>
+                                <button
+                                  className="primary-button"
+                                  disabled={projectRuntimeActionId !== null}
+                                  onClick={() =>
+                                    void handleProjectRuntimeAction(selectedProject, "start")
+                                  }
+                                  type="button"
+                                >
+                                  {projectRuntimeActionId === `${selectedProject.id}:start`
+                                    ? "Starting..."
+                                    : "Start App"}
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={projectRuntimeActionId !== null}
+                                  onClick={() =>
+                                    void handleProjectRuntimeAction(selectedProject, "restart")
+                                  }
+                                  type="button"
+                                >
+                                  {projectRuntimeActionId === `${selectedProject.id}:restart`
+                                    ? "Restarting..."
+                                    : "Restart App"}
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={projectRuntimeActionId !== null}
+                                  onClick={() =>
+                                    void handleProjectRuntimeAction(selectedProject, "stop")
+                                  }
+                                  type="button"
+                                >
+                                  {projectRuntimeActionId === `${selectedProject.id}:stop`
+                                    ? "Stopping..."
+                                    : "Stop App"}
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={
+                                    selectedProject.runtime.runtime_status !== "running" ||
+                                    !selectedProject.runtime.proxy_path
+                                  }
+                                  onClick={() =>
+                                    window.open(
+                                      `${apiBaseUrl}${selectedProject.runtime.proxy_path}`,
+                                      "_blank",
+                                      "noopener,noreferrer",
+                                    )
+                                  }
+                                  type="button"
+                                >
+                                  Open App
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
                           <div className="workflow-summary">
+                            <p>
+                              <strong>Runtime status:</strong>{" "}
+                              {selectedProject.runtime.runtime_status}
+                            </p>
+                            <p>
+                              <strong>Scripts:</strong>{" "}
+                              {[
+                                selectedProject.runtime.scripts.start,
+                                selectedProject.runtime.scripts.stop,
+                                selectedProject.runtime.scripts.restart,
+                                selectedProject.runtime.scripts.status,
+                              ]
+                                .filter(Boolean)
+                                .join(", ") || "none"}
+                            </p>
+                            <p>
+                              <strong>Proxy route:</strong>{" "}
+                              {selectedProject.runtime.proxy_path ?? "not available"}
+                            </p>
+                            <p>
+                              <strong>Log path:</strong>{" "}
+                              {selectedProject.runtime.log_path ?? "not available"}
+                            </p>
                             <p>
                               <strong>Open tasks:</strong>{" "}
                               {

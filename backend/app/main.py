@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.project_apps import router as project_apps_router
 from app.api.routes import router as api_router
 from app.config import get_settings
 from app.db.session import SessionLocal, engine
@@ -60,6 +61,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(project_apps_router)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 

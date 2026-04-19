@@ -7,6 +7,16 @@ from pathlib import Path
 from app.config import Settings
 
 _VALID_PROJECT_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+_MANAGED_SCAFFOLD_FILES = {
+    Path(".gitkeep"),
+    Path(".gitignore"),
+    Path("README.md"),
+    Path(".digital-company/project.json"),
+    Path("scripts/START"),
+    Path("scripts/STOP"),
+    Path("scripts/RESTART"),
+    Path("scripts/STATUS"),
+}
 
 
 class ProjectWorkspaceService:
@@ -45,9 +55,11 @@ class ProjectWorkspaceService:
         if project_directory is None:
             return []
         return sorted(
-            path.relative_to(project_directory)
+            relative_path
             for path in project_directory.rglob("*")
-            if path.is_file() and path.name != ".gitkeep"
+            if path.is_file()
+            and (relative_path := path.relative_to(project_directory)) not in _MANAGED_SCAFFOLD_FILES
+            and not str(relative_path).startswith(".digital-company/runtime/")
         )
 
     def has_workspace_artifacts(self, project_id: str | None) -> bool:

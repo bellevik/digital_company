@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     codex_cli_approval_policy: str = "never"
     codex_cli_sandbox_mode: str = "danger-full-access"
     codex_workdir: Path | None = None
+    project_runtime_host: str = "127.0.0.1"
+    project_runtime_base_port: int = 4100
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

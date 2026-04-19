@@ -570,7 +570,12 @@ def test_run_agent_once_fails_project_task_when_no_artifacts_are_created(
     assert payload["outcome"] == "failed"
     assert payload["task_run"]["status"] == "failed"
     assert "without creating files" in payload["task_run"]["stderr"]
-    assert not any(path.name != ".gitkeep" for path in (projects_root / "FutureCalc").iterdir())
+    assert (projects_root / "FutureCalc" / ".gitignore").is_file()
+    assert (projects_root / "FutureCalc" / "scripts" / "START").is_file()
+    assert not any(
+        path.name not in {".gitkeep", ".gitignore", "README.md", ".digital-company", "scripts"}
+        for path in (projects_root / "FutureCalc").iterdir()
+    )
 
     updated_task = next(item for item in client.get("/api/v1/tasks").json() if item["id"] == task["id"])
     assert updated_task["status"] == "failed"

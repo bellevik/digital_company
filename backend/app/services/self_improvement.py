@@ -24,7 +24,11 @@ from app.models.task_run import TaskRun
 from app.models.task_workflow import TaskWorkflow
 from app.schemas.self_improvement import SeedDemoResponse, SeedStartupTeamResponse, SystemSummary
 from app.services.memory import MemoryService
-from app.services.agent_catalog import resolve_agent_skills, resolve_agent_template
+from app.services.agent_catalog import (
+    default_template_id_for_role,
+    resolve_agent_skills,
+    resolve_agent_template,
+)
 from app.services.project_workspace import ProjectWorkspaceService
 from app.services.projects import ProjectService
 

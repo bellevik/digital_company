@@ -17,6 +17,7 @@ def test_create_and_list_projects(client: TestClient, projects_root) -> None:
             "id": "platform",
             "name": "Platform",
             "description": "Shared platform work.",
+            "project_type": "web",
         },
     )
 
@@ -24,11 +25,41 @@ def test_create_and_list_projects(client: TestClient, projects_root) -> None:
     created = create_response.json()
     assert created["id"] == "platform"
     assert created["name"] == "Platform"
+    assert created["runtime"]["project_type"] == "web"
+    assert created["runtime"]["runtime_status"] == "stopped"
+    assert created["runtime"]["proxy_path"] == "/project-apps/platform/"
     assert (projects_root / "platform").is_dir()
+    assert (projects_root / "platform" / ".gitignore").is_file()
+    assert "node_modules/" in (projects_root / "platform" / ".gitignore").read_text()
+    assert (projects_root / "platform" / "scripts" / "START").is_file()
+    assert (projects_root / "platform" / "scripts" / "STOP").is_file()
+    assert (projects_root / "platform" / "scripts" / "RESTART").is_file()
+    assert (projects_root / "platform" / "scripts" / "STATUS").is_file()
 
     list_response = client.get("/api/v1/projects")
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
+
+
+def test_project_runtime_status_endpoint_returns_scaffold_info(client: TestClient) -> None:
+    client.post(
+        "/api/v1/projects",
+        json={
+            "id": "futurecalc",
+            "name": "FutureCalc",
+            "description": "Calculator app.",
+            "project_type": "web",
+        },
+    )
+
+    response = client.get("/api/v1/projects/futurecalc/runtime")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_id"] == "futurecalc"
+    assert payload["runtime"]["project_type"] == "web"
+    assert payload["runtime"]["runtime_status"] == "stopped"
+    assert payload["runtime"]["scripts"]["start"] == "scripts/START"
 
 
 def test_seed_startup_team_creates_expected_roster_and_is_idempotent(client: TestClient) -> None:

@@ -9,6 +9,19 @@ class ProjectCreate(BaseModel):
     id: str
     name: str
     description: str | None = None
+    project_type: str = "web"
+
+
+class ProjectRuntimeRead(BaseModel):
+    project_type: str
+    framework: str | None
+    runtime_status: str
+    port: int | None
+    pid: int | None
+    proxy_path: str | None
+    local_url: str | None
+    log_path: str | None
+    scripts: dict[str, str | None]
 
 
 class ProjectRead(BaseModel):
@@ -19,3 +32,10 @@ class ProjectRead(BaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
+    runtime: ProjectRuntimeRead
+
+
+class ProjectRuntimeActionResponse(BaseModel):
+    project_id: str
+    message: str
+    runtime: ProjectRuntimeRead

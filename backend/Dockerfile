@@ -10,7 +10,7 @@ ENV HOME=/codex-home
 ARG TARGETARCH
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl tar \
+    && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl tar nodejs npm \
     && case "$TARGETARCH" in \
         amd64) CODEX_TARGET="x86_64-unknown-linux-musl" ;; \
         arm64) CODEX_TARGET="aarch64-unknown-linux-musl" ;; \
