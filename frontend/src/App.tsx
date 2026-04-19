@@ -112,22 +112,6 @@ type StudioAgentView = {
   walkDelay: number;
 };
 
-type StudioProp = {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  imagePath: string;
-  sourceWidth: number;
-  sourceHeight: number;
-  cropX: number;
-  cropY: number;
-  zIndex?: number;
-  opacity?: number;
-};
-
 type ProjectPlanTask = {
   id: string;
   parent_plan_task_id: string | null;
@@ -1590,6 +1574,8 @@ export default function App() {
                   <div className="studio-scene">
                     <div className="studio-noise" />
                     <div className="studio-grid-overlay" />
+                    <div className="studio-lane studio-lane-horizontal studio-lane-atrium" />
+                    <div className="studio-lane studio-lane-vertical studio-lane-spine" />
                     {Object.values(STUDIO_ZONES).map((zone) => (
                       <article
                         className={`studio-zone studio-zone-${zone.key}`}
@@ -1605,30 +1591,10 @@ export default function App() {
                           <span>{zone.icon}</span>
                           <strong>{zone.name}</strong>
                         </div>
-                        <p>{zone.summary}</p>
-                        <span className="score-pill">
+                        <span className="score-pill studio-zone-count">
                           {studioAgents.filter((entry) => entry.zone.key === zone.key).length} present
                         </span>
                       </article>
-                    ))}
-
-                    {STUDIO_PROPS.map((prop) => (
-                      <div
-                        aria-label={prop.label}
-                        className="studio-prop"
-                        key={prop.id}
-                        style={{
-                          left: `${prop.x}%`,
-                          top: `${prop.y}%`,
-                          width: `${prop.w}px`,
-                          height: `${prop.h}px`,
-                          zIndex: prop.zIndex ?? 1,
-                          opacity: prop.opacity ?? 0.96,
-                          backgroundImage: `url(${prop.imagePath})`,
-                          backgroundSize: `${prop.sourceWidth}px ${prop.sourceHeight}px`,
-                          backgroundPosition: `${-prop.cropX}px ${-prop.cropY}px`,
-                        }}
-                      />
                     ))}
 
                     {studioAgents.map((entry) => (
@@ -1646,6 +1612,7 @@ export default function App() {
                             "--agent-delay": `${entry.walkDelay}ms`,
                           } as React.CSSProperties
                         }
+                        title={`${entry.agent.name} · ${entry.destinationLabel}`}
                         type="button"
                       >
                         <div className="studio-agent-sprite-shell">
@@ -1661,12 +1628,15 @@ export default function App() {
                             }}
                           />
                         </div>
-                        <div className="studio-agent-label">
-                          <strong>{entry.agent.name}</strong>
-                          <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
-                            {entry.agent.status}
-                          </span>
-                        </div>
+                        <span className={`studio-agent-dot studio-agent-dot-${mapAgentStatus(entry.agent.status)}`} />
+                        {selectedStudioAgent?.agent.id === entry.agent.id ? (
+                          <div className="studio-agent-label">
+                            <strong>{entry.agent.name}</strong>
+                            <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
+                              {entry.agent.status}
+                            </span>
+                          </div>
+                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -3253,74 +3223,6 @@ const STUDIO_ROLE_SPRITES: Record<
     frame: { x: 0, y: 0, w: 32, h: 32 },
   },
 };
-
-const STUDIO_PROPS: StudioProp[] = [
-  {
-    id: "library-shelves",
-    label: "library shelves",
-    x: 76,
-    y: 72,
-    w: 112,
-    h: 64,
-    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
-    sourceWidth: 457,
-    sourceHeight: 305,
-    cropX: 0,
-    cropY: 221,
-  },
-  {
-    id: "dev-terminal-wall",
-    label: "developer terminals",
-    x: 19,
-    y: 28,
-    w: 108,
-    h: 56,
-    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
-    sourceWidth: 832,
-    sourceHeight: 512,
-    cropX: 505,
-    cropY: 250,
-  },
-  {
-    id: "qa-console",
-    label: "qa console",
-    x: 50,
-    y: 72,
-    w: 112,
-    h: 60,
-    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
-    sourceWidth: 832,
-    sourceHeight: 512,
-    cropX: 446,
-    cropY: 352,
-  },
-  {
-    id: "server-racks",
-    label: "server racks",
-    x: 50,
-    y: 14,
-    w: 128,
-    h: 64,
-    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
-    sourceWidth: 832,
-    sourceHeight: 512,
-    cropX: 438,
-    cropY: 236,
-  },
-  {
-    id: "review-gate",
-    label: "review gate",
-    x: 19,
-    y: 72,
-    w: 104,
-    h: 62,
-    imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
-    sourceWidth: 832,
-    sourceHeight: 512,
-    cropX: 632,
-    cropY: 242,
-  },
-];
 
 function buildStudioAgents({
   agents,

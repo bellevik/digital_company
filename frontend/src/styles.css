@@ -837,16 +837,16 @@ pre {
 .studio-zone {
   position: absolute;
   display: grid;
-  align-content: start;
-  gap: 0.45rem;
-  padding: 0.9rem;
+  align-content: space-between;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 18px;
   border: 1px solid rgba(149, 214, 255, 0.14);
-  background: rgba(9, 15, 24, 0.58);
+  background: rgba(9, 15, 24, 0.28);
   color: #e3edf6;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 14px 30px rgba(0, 0, 0, 0.18);
+    0 8px 18px rgba(0, 0, 0, 0.12);
   z-index: 0;
 }
 
@@ -880,9 +880,13 @@ pre {
 }
 
 .studio-zone .score-pill {
-  justify-self: start;
+  justify-self: end;
   background: rgba(255, 255, 255, 0.08);
   color: #dce8f3;
+}
+
+.studio-zone-count {
+  font-size: 0.72rem;
 }
 
 .studio-zone-strategy_room,
@@ -904,23 +908,43 @@ pre {
   border-color: rgba(109, 239, 189, 0.2);
 }
 
-.studio-prop {
+.studio-lane {
   position: absolute;
-  overflow: hidden;
-  image-rendering: pixelated;
-  transform: translate(-50%, -50%);
-  background-repeat: no-repeat;
-  filter:
-    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.26))
-    saturate(1.02);
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(91, 206, 255, 0.1), rgba(213, 108, 255, 0.08));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 0 24px rgba(88, 168, 255, 0.08);
   pointer-events: none;
+  z-index: 0;
+}
+
+.studio-lane-horizontal {
+  height: 3rem;
+}
+
+.studio-lane-vertical {
+  width: 3rem;
+}
+
+.studio-lane-atrium {
+  left: 12%;
+  top: 45%;
+  width: 76%;
+}
+
+.studio-lane-spine {
+  left: 48.5%;
+  top: 10%;
+  height: 72%;
 }
 
 .studio-agent-card {
   position: absolute;
   display: grid;
   justify-items: center;
-  gap: 0.28rem;
+  gap: 0.16rem;
   width: auto;
   padding: 0;
   background: transparent;
@@ -946,18 +970,18 @@ pre {
 .studio-agent-portrait {
   display: grid;
   place-items: center;
-  width: 3.8rem;
-  height: 3.8rem;
+  width: 3.2rem;
+  height: 3.2rem;
   border-radius: 999px;
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--agent-accent) 18%, transparent), transparent 72%);
+    radial-gradient(circle at center, color-mix(in srgb, var(--agent-accent) 16%, transparent), transparent 72%);
 }
 
 .studio-agent-sprite,
 .studio-agent-portrait-sprite {
   background-repeat: no-repeat;
   image-rendering: pixelated;
-  transform: scale(1.85);
+  transform: scale(1.7);
   transform-origin: center;
 }
 
@@ -975,6 +999,28 @@ pre {
 .studio-agent-label strong {
   font-size: 0.76rem;
   line-height: 1;
+}
+
+.studio-agent-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.studio-agent-dot-done {
+  color: #67db9e;
+  background: #67db9e;
+}
+
+.studio-agent-dot-in_progress {
+  color: #63a8ff;
+  background: #63a8ff;
+}
+
+.studio-agent-dot-failed {
+  color: #ff7b7b;
+  background: #ff7b7b;
 }
 
 .studio-agent-focus {
