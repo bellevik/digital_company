@@ -25,7 +25,7 @@ type ReviewDecisionType = "approved" | "changes_requested";
 type MemoryType = "conversation" | "decision" | "task_result" | "note";
 type TaskRunStatus = "running" | "succeeded" | "failed";
 type SearchStrategy = "keyword" | "vector" | "hybrid";
-type AppView = "overview" | "work" | "projects" | "agents";
+type AppView = "overview" | "studio" | "work" | "projects" | "agents";
 type WorkInspectorTab = "summary" | "activity" | "runs" | "review";
 type ProjectPanelTab = "summary" | "plan" | "tasks";
 type PlanStatus =
@@ -67,6 +67,18 @@ type ProjectResetResponse = {
   deleted_plan_count: number;
 };
 
+type StudioZoneKey =
+  | "atrium"
+  | "developer_bay"
+  | "design_pod"
+  | "systems_room"
+  | "library"
+  | "qa_lab"
+  | "review_deck"
+  | "strategy_room"
+  | "server_spine"
+  | "social_corner";
+
 type DecisionNotification = {
   id: string;
   kind: "plan" | "workflow";
@@ -74,6 +86,27 @@ type DecisionNotification = {
   detail: string;
   projectId: string | null;
   taskId: string | null;
+};
+
+type StudioZoneDefinition = {
+  key: StudioZoneKey;
+  name: string;
+  icon: string;
+  summary: string;
+  frame: { x: number; y: number; w: number; h: number };
+};
+
+type StudioAgentView = {
+  agent: Agent;
+  task: Task | null;
+  zone: StudioZoneDefinition;
+  position: { x: number; y: number };
+  spritePath: string;
+  accent: string;
+  accentLabel: string;
+  destinationLabel: string;
+  templateName: string;
+  walkDelay: number;
 };
 
 type ProjectPlanTask = {
@@ -364,6 +397,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<AppView>("work");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedStudioAgentId, setSelectedStudioAgentId] = useState<string | null>(null);
   const [selectedTaskEvents, setSelectedTaskEvents] = useState<TaskEvent[]>([]);
   const [workInspectorTab, setWorkInspectorTab] =
     useState<WorkInspectorTab>("summary");
@@ -547,6 +581,16 @@ export default function App() {
   const selectedProjectTasks = selectedProject
     ? tasks.filter((task) => task.project_id === selectedProject.id)
     : [];
+  const studioAgents = buildStudioAgents({
+    agents,
+    tasks,
+    projects,
+  });
+  const selectedStudioAgent =
+    studioAgents.find((entry) => entry.agent.id === selectedStudioAgentId) ??
+    studioAgents.find((entry) => entry.agent.status === "busy") ??
+    studioAgents[0] ??
+    null;
   const recentTaskRuns = [...taskRuns]
     .sort((left, right) => right.started_at.localeCompare(left.started_at))
     .slice(0, 6);
@@ -579,6 +623,10 @@ export default function App() {
     overview: {
       title: "Overview",
       subtitle: "Health, throughput, and company-level controls.",
+    },
+    studio: {
+      title: "Studio",
+      subtitle: "Watch the team move through the tower and see where work is happening.",
     },
     work: {
       title: "Work",
@@ -644,6 +692,15 @@ export default function App() {
       matchingTemplates[0].id;
     setAgentDraft((current) => ({ ...current, templateId: nextTemplateId }));
   }, [agentCatalog.templates, agentDraft.role, agentDraft.templateId]);
+
+  useEffect(() => {
+    setSelectedStudioAgentId((current) => {
+      if (current && studioAgents.some((entry) => entry.agent.id === current)) {
+        return current;
+      }
+      return studioAgents.find((entry) => entry.agent.status === "busy")?.agent.id ?? studioAgents[0]?.agent.id ?? null;
+    });
+  }, [studioAgents]);
 
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
@@ -1193,7 +1250,7 @@ export default function App() {
           </div>
 
           <nav className="sidebar-nav" aria-label="Primary">
-            {(["overview", "work", "projects", "agents"] as AppView[]).map((view) => (
+            {(["overview", "studio", "work", "projects", "agents"] as AppView[]).map((view) => (
               <button
                 className={`nav-link ${activeView === view ? "nav-link-active" : ""}`}
                 key={view}
@@ -1476,6 +1533,224 @@ export default function App() {
                     ))}
                   </div>
                 </Panel>
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "studio" ? (
+            <div className="content-stack">
+              <section className="overview-grid overview-grid-compact">
+                <MetricCard
+                  label="Visible Agents"
+                  value={String(studioAgents.length)}
+                  detail="always present on the floor"
+                />
+                <MetricCard
+                  label="Busy In Tower"
+                  value={String(studioAgents.filter((entry) => entry.agent.status === "busy").length)}
+                  detail="currently moving or stationed"
+                />
+                <MetricCard
+                  label="Active Zones"
+                  value={String(new Set(studioAgents.map((entry) => entry.zone.key)).size)}
+                  detail="parts of the tower in use"
+                />
+                <MetricCard
+                  label="Open Decisions"
+                  value={String(decisionNotifications.length)}
+                  detail="visible from the bell inbox"
+                />
+              </section>
+
+              <section className="split-layout-wide studio-layout">
+                <Panel
+                  title="Tower 01"
+                  subtitle="A spacious grimy cyberpunk floor where every agent stays visible and routes to the correct zone."
+                  actions={<span className="panel-note">Top-down studio prototype</span>}
+                >
+                  <div className="studio-scene">
+                    <div className="studio-noise" />
+                    <div className="studio-grid-overlay" />
+                    {Object.values(STUDIO_ZONES).map((zone) => (
+                      <article
+                        className={`studio-zone studio-zone-${zone.key}`}
+                        key={zone.key}
+                        style={{
+                          left: `${zone.frame.x}%`,
+                          top: `${zone.frame.y}%`,
+                          width: `${zone.frame.w}%`,
+                          height: `${zone.frame.h}%`,
+                        }}
+                      >
+                        <div className="studio-zone-header">
+                          <span>{zone.icon}</span>
+                          <strong>{zone.name}</strong>
+                        </div>
+                        <p>{zone.summary}</p>
+                        <span className="score-pill">
+                          {studioAgents.filter((entry) => entry.zone.key === zone.key).length} present
+                        </span>
+                      </article>
+                    ))}
+
+                    {studioAgents.map((entry) => (
+                      <button
+                        className={`studio-agent-card ${
+                          selectedStudioAgent?.agent.id === entry.agent.id ? "studio-agent-card-active" : ""
+                        }`}
+                        key={entry.agent.id}
+                        onClick={() => setSelectedStudioAgentId(entry.agent.id)}
+                        style={
+                          {
+                            left: `${entry.position.x}%`,
+                            top: `${entry.position.y}%`,
+                            "--agent-accent": entry.accent,
+                            "--agent-delay": `${entry.walkDelay}ms`,
+                          } as React.CSSProperties
+                        }
+                        type="button"
+                      >
+                        <div className="studio-agent-sprite-shell">
+                          <img
+                            alt={`${entry.agent.name} sprite`}
+                            className="studio-agent-sprite"
+                            src={entry.spritePath}
+                          />
+                        </div>
+                        <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
+                          {entry.agent.status}
+                        </span>
+                        <strong>{entry.agent.name}</strong>
+                        <span className="studio-agent-destination">{entry.destinationLabel}</span>
+                      </button>
+                    ))}
+                  </div>
+                </Panel>
+
+                <div className="work-inspector-column">
+                  <Panel
+                    title={selectedStudioAgent ? selectedStudioAgent.agent.name : "Agent Detail"}
+                    subtitle={
+                      selectedStudioAgent
+                        ? `${labelize(selectedStudioAgent.agent.role)} stationed in ${selectedStudioAgent.zone.name}`
+                        : "Select an agent in the tower"
+                    }
+                  >
+                    {selectedStudioAgent ? (
+                      <div className="detail-block">
+                        <div className="detail-headline">
+                          <div>
+                            <h3>{selectedStudioAgent.agent.name}</h3>
+                            <p className="muted">
+                              {labelize(selectedStudioAgent.agent.role)} • {selectedStudioAgent.templateName}
+                            </p>
+                          </div>
+                          <span className={`status-pill status-${mapAgentStatus(selectedStudioAgent.agent.status)}`}>
+                            {selectedStudioAgent.agent.status}
+                          </span>
+                        </div>
+                        <div className="studio-agent-focus">
+                          <div className="studio-agent-portrait">
+                            <img
+                              alt={`${selectedStudioAgent.agent.name} portrait`}
+                              className="studio-agent-portrait-sprite"
+                              src={selectedStudioAgent.spritePath}
+                            />
+                          </div>
+                          <div className="workflow-summary">
+                            <p>
+                              <strong>Current zone:</strong> {selectedStudioAgent.zone.name}
+                            </p>
+                            <p>
+                              <strong>Behavior:</strong> {selectedStudioAgent.destinationLabel}
+                            </p>
+                            <p>
+                              <strong>Accent:</strong> {selectedStudioAgent.accentLabel}
+                            </p>
+                            <p>
+                              <strong>Skills:</strong>{" "}
+                              {selectedStudioAgent.agent.skill_ids.length > 0
+                                ? selectedStudioAgent.agent.skill_ids
+                                    .map((skillId) => findSkillName(skillId, agentCatalog.skills))
+                                    .join(", ")
+                                : "None attached"}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedStudioAgent.task ? (
+                          <article className="entity-card">
+                            <div className="entity-meta">
+                              <div>
+                                <h4>{selectedStudioAgent.task.title}</h4>
+                                <p>
+                                  {selectedStudioAgent.task.type} •{" "}
+                                  {formatTaskProject(selectedStudioAgent.task.project_id, projects)}
+                                </p>
+                              </div>
+                              <span className={`status-pill status-${selectedStudioAgent.task.status}`}>
+                                {selectedStudioAgent.task.status}
+                              </span>
+                            </div>
+                            <p>{selectedStudioAgent.task.description}</p>
+                            <div className="task-actions">
+                              <button
+                                className="secondary-button"
+                                onClick={() => {
+                                  setSelectedTaskId(selectedStudioAgent.task?.id ?? null);
+                                  setWorkInspectorTab("summary");
+                                  setActiveView("work");
+                                }}
+                                type="button"
+                              >
+                                Open Task
+                              </button>
+                              {selectedStudioAgent.task.project_id ? (
+                                <button
+                                  className="secondary-button"
+                                  onClick={() => {
+                                    setSelectedProjectId(selectedStudioAgent.task?.project_id ?? null);
+                                    setProjectPanelTab("summary");
+                                    setActiveView("projects");
+                                  }}
+                                  type="button"
+                                >
+                                  Open Project
+                                </button>
+                              ) : null}
+                            </div>
+                          </article>
+                        ) : (
+                          <p className="muted">This agent is idle in their home zone.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="muted">No agents are available yet.</p>
+                    )}
+                  </Panel>
+
+                  <Panel
+                    title="Zone Routing"
+                    subtitle="Where agents go when they pick up work in the tower"
+                  >
+                    <div className="entity-list studio-legend">
+                      {Object.values(STUDIO_ZONES).map((zone) => (
+                        <article className="entity-card studio-legend-card" key={zone.key}>
+                          <div className="entity-meta">
+                            <div>
+                              <h4>
+                                {zone.icon} {zone.name}
+                              </h4>
+                              <p>{zone.summary}</p>
+                            </div>
+                            <span className="score-pill">
+                              {studioAgents.filter((entry) => entry.zone.key === zone.key).length}
+                            </span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </Panel>
+                </div>
               </section>
             </div>
           ) : null}
@@ -2719,6 +2994,277 @@ function findTemplateName(templateId: string | null, templates: AgentTemplate[])
 
 function findSkillName(skillId: string, skills: AgentSkill[]) {
   return skills.find((skill) => skill.id === skillId)?.name ?? skillId;
+}
+
+const STUDIO_ZONES: Record<StudioZoneKey, StudioZoneDefinition> = {
+  atrium: {
+    key: "atrium",
+    name: "Central Atrium",
+    icon: "◈",
+    summary: "Elevator core, circulation spine, and ambient neon foot traffic.",
+    frame: { x: 38, y: 34, w: 24, h: 22 },
+  },
+  developer_bay: {
+    key: "developer_bay",
+    name: "Developer Bay",
+    icon: "⌘",
+    summary: "Terminal desks, docking rigs, and the main implementation lane.",
+    frame: { x: 6, y: 18, w: 28, h: 36 },
+  },
+  design_pod: {
+    key: "design_pod",
+    name: "Design Pod",
+    icon: "✦",
+    summary: "Projection walls, neon mockups, and interface exploration tables.",
+    frame: { x: 66, y: 12, w: 24, h: 20 },
+  },
+  systems_room: {
+    key: "systems_room",
+    name: "Systems Room",
+    icon: "▣",
+    summary: "Blueprint boards, systems maps, and architecture consoles.",
+    frame: { x: 66, y: 36, w: 24, h: 20 },
+  },
+  library: {
+    key: "library",
+    name: "Library / Archive",
+    icon: "▤",
+    summary: "Research shelves, document terminals, and scope references.",
+    frame: { x: 66, y: 60, w: 24, h: 20 },
+  },
+  qa_lab: {
+    key: "qa_lab",
+    name: "QA Lab",
+    icon: "◫",
+    summary: "Device benches and regression checks under hard white light.",
+    frame: { x: 38, y: 60, w: 24, h: 20 },
+  },
+  review_deck: {
+    key: "review_deck",
+    name: "Review Deck",
+    icon: "⛨",
+    summary: "Approval desks and release gate oversight above the floor.",
+    frame: { x: 10, y: 62, w: 24, h: 18 },
+  },
+  strategy_room: {
+    key: "strategy_room",
+    name: "Strategy Room",
+    icon: "◬",
+    summary: "Planner table, roadmap wall, and bounded execution decisions.",
+    frame: { x: 10, y: 8, w: 24, h: 18 },
+  },
+  server_spine: {
+    key: "server_spine",
+    name: "Server Spine",
+    icon: "⛁",
+    summary: "Racks, pipes, and gritty operational infrastructure.",
+    frame: { x: 38, y: 8, w: 24, h: 18 },
+  },
+  social_corner: {
+    key: "social_corner",
+    name: "Social Corner",
+    icon: "◌",
+    summary: "Idle spillover zone with vending glow and ambient chatter.",
+    frame: { x: 6, y: 36, w: 10, h: 18 },
+  },
+};
+
+const STUDIO_ZONE_SLOTS: Record<StudioZoneKey, Array<{ x: number; y: number }>> = {
+  atrium: [
+    { x: 45, y: 42 },
+    { x: 50, y: 40 },
+    { x: 55, y: 42 },
+  ],
+  developer_bay: [
+    { x: 12, y: 24 },
+    { x: 20, y: 24 },
+    { x: 28, y: 24 },
+    { x: 12, y: 38 },
+    { x: 20, y: 38 },
+    { x: 28, y: 38 },
+  ],
+  design_pod: [
+    { x: 72, y: 18 },
+    { x: 82, y: 18 },
+    { x: 77, y: 26 },
+  ],
+  systems_room: [
+    { x: 72, y: 42 },
+    { x: 82, y: 42 },
+    { x: 77, y: 50 },
+  ],
+  library: [
+    { x: 72, y: 66 },
+    { x: 82, y: 66 },
+    { x: 77, y: 74 },
+  ],
+  qa_lab: [
+    { x: 44, y: 66 },
+    { x: 56, y: 66 },
+    { x: 50, y: 74 },
+  ],
+  review_deck: [
+    { x: 16, y: 68 },
+    { x: 28, y: 68 },
+    { x: 22, y: 76 },
+  ],
+  strategy_room: [
+    { x: 16, y: 14 },
+    { x: 28, y: 14 },
+    { x: 22, y: 22 },
+  ],
+  server_spine: [
+    { x: 44, y: 14 },
+    { x: 56, y: 14 },
+    { x: 50, y: 22 },
+  ],
+  social_corner: [
+    { x: 10, y: 42 },
+    { x: 12, y: 48 },
+  ],
+};
+
+const STUDIO_ROLE_HOME: Record<AgentRole, StudioZoneKey> = {
+  planner: "strategy_room",
+  designer: "design_pod",
+  architect: "systems_room",
+  developer: "developer_bay",
+  tester: "qa_lab",
+  reviewer: "review_deck",
+  review_agent: "review_deck",
+};
+
+const STUDIO_ROLE_SPRITES: Record<AgentRole, { path: string; accent: string; accentLabel: string }> = {
+  planner: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Mage-Cyan.png",
+    accent: "#55d6ff",
+    accentLabel: "cyan strategy glow",
+  },
+  designer: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Archer-Purple.png",
+    accent: "#cf79ff",
+    accentLabel: "violet design glow",
+  },
+  architect: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Mage-Red.png",
+    accent: "#ff7285",
+    accentLabel: "red systems glow",
+  },
+  developer: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Soldier-Blue.png",
+    accent: "#63a8ff",
+    accentLabel: "blue terminal glow",
+  },
+  tester: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Soldier-Yellow.png",
+    accent: "#f0d166",
+    accentLabel: "amber QA glow",
+  },
+  reviewer: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Archer-Green.png",
+    accent: "#67db9e",
+    accentLabel: "green review glow",
+  },
+  review_agent: {
+    path: "/studio-assets/vendor/puny-characters/Puny-Characters/Warrior-Red.png",
+    accent: "#ff8f66",
+    accentLabel: "orange release glow",
+  },
+};
+
+function buildStudioAgents({
+  agents,
+  tasks,
+  projects,
+}: {
+  agents: Agent[];
+  tasks: Task[];
+  projects: Project[];
+}): StudioAgentView[] {
+  const agentsNewestLast = [...agents].sort((left, right) => left.created_at.localeCompare(right.created_at));
+  const zoneOccupancy = new Map<StudioZoneKey, number>();
+
+  return agentsNewestLast.map((agent, index) => {
+    const task =
+      tasks.find((entry) => entry.id === agent.current_task_id) ??
+      tasks.find((entry) => entry.assigned_agent_id === agent.id && entry.status === "in_progress") ??
+      null;
+    const zoneKey = resolveStudioZone(agent, task);
+    const zone = STUDIO_ZONES[zoneKey];
+    const slotIndex = zoneOccupancy.get(zoneKey) ?? 0;
+    zoneOccupancy.set(zoneKey, slotIndex + 1);
+    const slots = STUDIO_ZONE_SLOTS[zoneKey];
+    const position = slots[slotIndex % slots.length] ?? { x: zone.frame.x + 4, y: zone.frame.y + 4 };
+    const sprite = STUDIO_ROLE_SPRITES[agent.role];
+
+    return {
+      agent,
+      task,
+      zone,
+      position,
+      spritePath: sprite.path,
+      accent: sprite.accent,
+      accentLabel: sprite.accentLabel,
+      destinationLabel: describeStudioDestination(agent, task, projects, zone),
+      templateName: templateNameFromId(agent.template_id),
+      walkDelay: index * 90,
+    };
+  });
+}
+
+function resolveStudioZone(agent: Agent, task: Task | null): StudioZoneKey {
+  if (task === null) {
+    return STUDIO_ROLE_HOME[agent.role];
+  }
+
+  if (task.type === "idea") {
+    return "strategy_room";
+  }
+  if (task.type === "research") {
+    return "library";
+  }
+  if (task.type === "ops") {
+    return "server_spine";
+  }
+  if (task.type === "review") {
+    return agent.role === "tester" ? "qa_lab" : "review_deck";
+  }
+  if (task.type === "bugfix") {
+    return agent.role === "tester" ? "qa_lab" : "developer_bay";
+  }
+  if (task.type === "feature") {
+    if (agent.role === "designer") {
+      return "design_pod";
+    }
+    if (agent.role === "architect") {
+      return "systems_room";
+    }
+    return "developer_bay";
+  }
+  return STUDIO_ROLE_HOME[agent.role];
+}
+
+function describeStudioDestination(
+  agent: Agent,
+  task: Task | null,
+  projects: Project[],
+  zone: StudioZoneDefinition,
+) {
+  if (task === null) {
+    return `Idle in ${zone.name}`;
+  }
+  return `${labelize(task.type)} for ${formatTaskProject(task.project_id, projects)} in ${zone.name}`;
+}
+
+function templateNameFromId(templateId: string | null) {
+  if (!templateId) {
+    return "Default template";
+  }
+  return templateId
+    .split("_")
+    .slice(1)
+    .map((part) => labelize(part))
+    .join(" ");
 }
 
 function formatTaskProject(projectId: string | null, projects: Project[]) {
