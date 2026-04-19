@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type ApiState = {
   status: "loading" | "online" | "offline";
@@ -65,6 +65,15 @@ type ProjectResetResponse = {
   deleted_task_count: number;
   deleted_memory_count: number;
   deleted_plan_count: number;
+};
+
+type DecisionNotification = {
+  id: string;
+  kind: "plan" | "workflow";
+  title: string;
+  detail: string;
+  projectId: string | null;
+  taskId: string | null;
 };
 
 type ProjectPlanTask = {
@@ -378,12 +387,14 @@ export default function App() {
   const [isDeletingAgentId, setIsDeletingAgentId] = useState<string | null>(null);
   const [isDeletingProjectId, setIsDeletingProjectId] = useState<string | null>(null);
   const [isResettingProjectId, setIsResettingProjectId] = useState<string | null>(null);
+  const [isDecisionMenuOpen, setIsDecisionMenuOpen] = useState(false);
   const [isPitchingIdea, setIsPitchingIdea] = useState(false);
   const [isSubmittingPlanDecision, setIsSubmittingPlanDecision] = useState(false);
   const [isSubmittingWorkflow, setIsSubmittingWorkflow] = useState(false);
   const [isRunningSelfImprovement, setIsRunningSelfImprovement] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [taskActionInFlight, setTaskActionInFlight] = useState<string | null>(null);
+  const decisionMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -539,6 +550,31 @@ export default function App() {
   const recentTaskRuns = [...taskRuns]
     .sort((left, right) => right.started_at.localeCompare(left.started_at))
     .slice(0, 6);
+  const decisionNotifications: DecisionNotification[] = [
+    ...projectPlans
+      .filter((plan) => plan.status === "pending_approval")
+      .map((plan) => ({
+        id: `plan:${plan.id}`,
+        kind: "plan" as const,
+        title: `Approve plan for ${projectLabel(plan.project_id, projects)}`,
+        detail: plan.idea_title,
+        projectId: plan.project_id,
+        taskId: null,
+      })),
+    ...workflows
+      .filter((workflow) => workflow.approval_status === "pending_approval")
+      .map((workflow) => {
+        const task = tasks.find((item) => item.id === workflow.task_id) ?? null;
+        return {
+          id: `workflow:${workflow.id}`,
+          kind: "workflow" as const,
+          title: `Review task in ${projectLabel(task?.project_id ?? null, projects)}`,
+          detail: task?.title ?? "Task awaiting decision",
+          projectId: task?.project_id ?? null,
+          taskId: task?.id ?? workflow.task_id,
+        };
+      }),
+  ];
   const viewTitles: Record<AppView, { title: string; subtitle: string }> = {
     overview: {
       title: "Overview",
@@ -608,6 +644,21 @@ export default function App() {
       matchingTemplates[0].id;
     setAgentDraft((current) => ({ ...current, templateId: nextTemplateId }));
   }, [agentCatalog.templates, agentDraft.role, agentDraft.templateId]);
+
+  useEffect(() => {
+    function handleDocumentClick(event: MouseEvent) {
+      if (
+        decisionMenuRef.current &&
+        event.target instanceof Node &&
+        !decisionMenuRef.current.contains(event.target)
+      ) {
+        setIsDecisionMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleDocumentClick);
+    return () => document.removeEventListener("mousedown", handleDocumentClick);
+  }, []);
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1109,6 +1160,26 @@ export default function App() {
     }
   }
 
+  function handleDecisionNotificationClick(notification: DecisionNotification) {
+    setIsDecisionMenuOpen(false);
+    if (notification.projectId) {
+      setSelectedProjectId(notification.projectId);
+      setTaskDraft((current) => ({ ...current, projectId: notification.projectId ?? "" }));
+    }
+    if (notification.taskId) {
+      setSelectedTaskId(notification.taskId);
+    }
+
+    if (notification.kind === "plan") {
+      setProjectPanelTab("plan");
+      setActiveView("projects");
+      return;
+    }
+
+    setWorkInspectorTab("review");
+    setActiveView("work");
+  }
+
   return (
     <main className="app-shell">
       <div className="app-frame">
@@ -1174,6 +1245,56 @@ export default function App() {
               <p className="topbar-copy">{viewTitles[activeView].subtitle}</p>
             </div>
             <div className="topbar-actions">
+              <div className="notification-shell" ref={decisionMenuRef}>
+                <button
+                  aria-expanded={isDecisionMenuOpen}
+                  aria-label={`Decision inbox with ${decisionNotifications.length} pending item(s)`}
+                  className={`notification-button ${decisionNotifications.length > 0 ? "notification-button-active" : ""}`}
+                  onClick={() => setIsDecisionMenuOpen((current) => !current)}
+                  type="button"
+                >
+                  <span className="notification-icon" aria-hidden="true">
+                    🔔
+                  </span>
+                  <span className="notification-label">Decisions</span>
+                  <span className="notification-count">{decisionNotifications.length}</span>
+                </button>
+                {isDecisionMenuOpen ? (
+                  <div className="notification-menu">
+                    <div className="notification-menu-header">
+                      <strong>Decision Inbox</strong>
+                      <span>{decisionNotifications.length} pending</span>
+                    </div>
+                    {decisionNotifications.length > 0 ? (
+                      <div className="notification-list">
+                        {decisionNotifications.map((notification) => (
+                          <button
+                            className="notification-item"
+                            key={notification.id}
+                            onClick={() => handleDecisionNotificationClick(notification)}
+                            type="button"
+                          >
+                            <div className="notification-item-topline">
+                              <span className="score-pill">
+                                {notification.kind === "plan" ? "plan" : "review"}
+                              </span>
+                              <span className="muted">
+                                {notification.kind === "plan" ? "Projects" : "Work"}
+                              </span>
+                            </div>
+                            <strong>{notification.title}</strong>
+                            <p>{notification.detail}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="notification-empty">
+                        <p>No pending decisions right now.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
               <button
                 className="secondary-button"
                 disabled={isSeedingStartupTeam || isRunningAllAgents || isRunningAgentId !== null}
@@ -2606,6 +2727,14 @@ function formatTaskProject(projectId: string | null, projects: Project[]) {
   }
   const project = projects.find((entry) => entry.id === projectId);
   return project ? `${project.name}` : projectId;
+}
+
+function projectLabel(projectId: string | null, projects: Project[]) {
+  if (!projectId) {
+    return "Unscoped";
+  }
+  const project = projects.find((entry) => entry.id === projectId);
+  return project?.name ?? projectId;
 }
 
 function mapRunStatus(status: TaskRunStatus) {
