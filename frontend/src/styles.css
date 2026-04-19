@@ -828,26 +828,29 @@ pre {
 
 .studio-grid-overlay {
   background:
-    linear-gradient(90deg, rgba(106, 180, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(106, 180, 255, 0.05) 1px, transparent 1px);
+    linear-gradient(90deg, rgba(106, 180, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(106, 180, 255, 0.03) 1px, transparent 1px);
   background-size: 56px 56px;
-  opacity: 0.35;
+  opacity: 0.2;
 }
 
 .studio-zone {
   position: absolute;
   display: grid;
   align-content: space-between;
-  gap: 0.25rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 18px;
-  border: 1px solid rgba(149, 214, 255, 0.14);
-  background: rgba(9, 15, 24, 0.28);
+  gap: 0.5rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 22px;
+  border: 1px solid rgba(149, 214, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(12, 20, 31, 0.95), rgba(10, 16, 26, 0.9)),
+    rgba(9, 15, 24, 0.88);
   color: #e3edf6;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 8px 18px rgba(0, 0, 0, 0.12);
-  z-index: 0;
+    inset 0 -18px 24px rgba(0, 0, 0, 0.18),
+    0 12px 24px rgba(0, 0, 0, 0.16);
+  z-index: 1;
 }
 
 .studio-zone::after {
@@ -855,7 +858,7 @@ pre {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 42%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 36%);
   pointer-events: none;
 }
 
@@ -881,7 +884,7 @@ pre {
 
 .studio-zone .score-pill {
   justify-self: end;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #dce8f3;
 }
 
@@ -908,36 +911,34 @@ pre {
   border-color: rgba(109, 239, 189, 0.2);
 }
 
-.studio-lane {
+.studio-corridor {
   position: absolute;
-  border-radius: 999px;
+  border-radius: 18px;
   background:
-    linear-gradient(90deg, rgba(91, 206, 255, 0.1), rgba(213, 108, 255, 0.08));
+    linear-gradient(180deg, rgba(26, 41, 61, 0.92), rgba(20, 34, 51, 0.92));
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 0 24px rgba(88, 168, 255, 0.08);
+    inset 0 0 0 1px rgba(121, 185, 255, 0.08),
+    inset 0 10px 20px rgba(255, 255, 255, 0.02),
+    0 0 22px rgba(59, 125, 208, 0.08);
   pointer-events: none;
   z-index: 0;
 }
 
-.studio-lane-horizontal {
-  height: 3rem;
+.studio-corridor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, transparent 0 46%, rgba(93, 198, 255, 0.16) 50%, transparent 54%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 45%);
+  opacity: 0.55;
 }
 
-.studio-lane-vertical {
-  width: 3rem;
-}
-
-.studio-lane-atrium {
-  left: 12%;
-  top: 45%;
-  width: 76%;
-}
-
-.studio-lane-spine {
-  left: 48.5%;
-  top: 10%;
-  height: 72%;
+.studio-corridor-spur {
+  box-shadow:
+    inset 0 0 0 1px rgba(121, 185, 255, 0.06),
+    0 0 18px rgba(59, 125, 208, 0.05);
 }
 
 .studio-agent-card {

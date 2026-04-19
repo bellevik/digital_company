@@ -96,6 +96,15 @@ type StudioZoneDefinition = {
   frame: { x: number; y: number; w: number; h: number };
 };
 
+type StudioCorridor = {
+  key: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  variant?: "main" | "spur";
+};
+
 type StudioAgentView = {
   agent: Agent;
   task: Task | null;
@@ -1574,8 +1583,18 @@ export default function App() {
                   <div className="studio-scene">
                     <div className="studio-noise" />
                     <div className="studio-grid-overlay" />
-                    <div className="studio-lane studio-lane-horizontal studio-lane-atrium" />
-                    <div className="studio-lane studio-lane-vertical studio-lane-spine" />
+                    {STUDIO_CORRIDORS.map((corridor) => (
+                      <div
+                        className={`studio-corridor ${corridor.variant ? `studio-corridor-${corridor.variant}` : ""}`}
+                        key={corridor.key}
+                        style={{
+                          left: `${corridor.x}%`,
+                          top: `${corridor.y}%`,
+                          width: `${corridor.w}%`,
+                          height: `${corridor.h}%`,
+                        }}
+                      />
+                    ))}
                     {Object.values(STUDIO_ZONES).map((zone) => (
                       <article
                         className={`studio-zone studio-zone-${zone.key}`}
@@ -3023,125 +3042,135 @@ const STUDIO_ZONES: Record<StudioZoneKey, StudioZoneDefinition> = {
     name: "Central Atrium",
     icon: "◈",
     summary: "Elevator core, circulation spine, and ambient neon foot traffic.",
-    frame: { x: 38, y: 34, w: 24, h: 22 },
+    frame: { x: 40, y: 35, w: 20, h: 16 },
   },
   developer_bay: {
     key: "developer_bay",
     name: "Developer Bay",
     icon: "⌘",
     summary: "Terminal desks, docking rigs, and the main implementation lane.",
-    frame: { x: 6, y: 18, w: 28, h: 36 },
+    frame: { x: 8, y: 35, w: 24, h: 16 },
   },
   design_pod: {
     key: "design_pod",
     name: "Design Pod",
     icon: "✦",
     summary: "Projection walls, neon mockups, and interface exploration tables.",
-    frame: { x: 66, y: 12, w: 24, h: 20 },
+    frame: { x: 72, y: 10, w: 18, h: 16 },
   },
   systems_room: {
     key: "systems_room",
     name: "Systems Room",
     icon: "▣",
     summary: "Blueprint boards, systems maps, and architecture consoles.",
-    frame: { x: 66, y: 36, w: 24, h: 20 },
+    frame: { x: 68, y: 35, w: 22, h: 16 },
   },
   library: {
     key: "library",
     name: "Library / Archive",
     icon: "▤",
     summary: "Research shelves, document terminals, and scope references.",
-    frame: { x: 66, y: 60, w: 24, h: 20 },
+    frame: { x: 68, y: 62, w: 22, h: 16 },
   },
   qa_lab: {
     key: "qa_lab",
     name: "QA Lab",
     icon: "◫",
     summary: "Device benches and regression checks under hard white light.",
-    frame: { x: 38, y: 60, w: 24, h: 20 },
+    frame: { x: 40, y: 62, w: 20, h: 16 },
   },
   review_deck: {
     key: "review_deck",
     name: "Review Deck",
     icon: "⛨",
     summary: "Approval desks and release gate oversight above the floor.",
-    frame: { x: 10, y: 62, w: 24, h: 18 },
+    frame: { x: 8, y: 62, w: 22, h: 16 },
   },
   strategy_room: {
     key: "strategy_room",
     name: "Strategy Room",
     icon: "◬",
     summary: "Planner table, roadmap wall, and bounded execution decisions.",
-    frame: { x: 10, y: 8, w: 24, h: 18 },
+    frame: { x: 8, y: 10, w: 22, h: 16 },
   },
   server_spine: {
     key: "server_spine",
     name: "Server Spine",
     icon: "⛁",
     summary: "Racks, pipes, and gritty operational infrastructure.",
-    frame: { x: 38, y: 8, w: 24, h: 18 },
+    frame: { x: 40, y: 10, w: 20, h: 16 },
   },
   social_corner: {
     key: "social_corner",
     name: "Social Corner",
     icon: "◌",
     summary: "Idle spillover zone with vending glow and ambient chatter.",
-    frame: { x: 6, y: 36, w: 10, h: 18 },
+    frame: { x: 8, y: 84, w: 18, h: 10 },
   },
 };
 
+const STUDIO_CORRIDORS: StudioCorridor[] = [
+  { key: "top-run", x: 19, y: 28, w: 62, h: 4, variant: "main" },
+  { key: "mid-run", x: 19, y: 53, w: 62, h: 4, variant: "main" },
+  { key: "bottom-run", x: 19, y: 80, w: 62, h: 4, variant: "main" },
+  { key: "left-spine", x: 18, y: 18, w: 4, h: 67, variant: "main" },
+  { key: "center-spine", x: 48, y: 18, w: 4, h: 67, variant: "main" },
+  { key: "right-spine", x: 78, y: 18, w: 4, h: 67, variant: "main" },
+  { key: "social-spur", x: 16, y: 80, w: 4, h: 12, variant: "spur" },
+];
+
 const STUDIO_ZONE_SLOTS: Record<StudioZoneKey, Array<{ x: number; y: number }>> = {
   atrium: [
-    { x: 45, y: 42 },
-    { x: 50, y: 40 },
-    { x: 55, y: 42 },
+    { x: 46, y: 41 },
+    { x: 50, y: 41 },
+    { x: 54, y: 41 },
   ],
   developer_bay: [
-    { x: 12, y: 24 },
-    { x: 20, y: 24 },
-    { x: 28, y: 24 },
-    { x: 12, y: 38 },
-    { x: 20, y: 38 },
-    { x: 28, y: 38 },
+    { x: 14, y: 41 },
+    { x: 20, y: 41 },
+    { x: 26, y: 41 },
+    { x: 14, y: 47 },
+    { x: 20, y: 47 },
+    { x: 26, y: 47 },
   ],
   design_pod: [
-    { x: 72, y: 18 },
-    { x: 82, y: 18 },
-    { x: 77, y: 26 },
+    { x: 76, y: 17 },
+    { x: 84, y: 17 },
+    { x: 80, y: 22 },
   ],
   systems_room: [
-    { x: 72, y: 42 },
-    { x: 82, y: 42 },
-    { x: 77, y: 50 },
+    { x: 74, y: 41 },
+    { x: 82, y: 41 },
+    { x: 78, y: 47 },
   ],
   library: [
-    { x: 72, y: 66 },
-    { x: 82, y: 66 },
-    { x: 77, y: 74 },
+    { x: 74, y: 68 },
+    { x: 82, y: 68 },
+    { x: 78, y: 74 },
   ],
   qa_lab: [
-    { x: 44, y: 66 },
-    { x: 56, y: 66 },
+    { x: 46, y: 68 },
+    { x: 54, y: 68 },
     { x: 50, y: 74 },
   ],
   review_deck: [
-    { x: 16, y: 68 },
-    { x: 28, y: 68 },
-    { x: 22, y: 76 },
+    { x: 14, y: 68 },
+    { x: 22, y: 68 },
+    { x: 18, y: 74 },
   ],
   strategy_room: [
-    { x: 16, y: 14 },
-    { x: 28, y: 14 },
-    { x: 22, y: 22 },
+    { x: 14, y: 17 },
+    { x: 22, y: 17 },
+    { x: 18, y: 22 },
   ],
   server_spine: [
-    { x: 44, y: 14 },
-    { x: 56, y: 14 },
+    { x: 46, y: 17 },
+    { x: 54, y: 17 },
     { x: 50, y: 22 },
   ],
   social_corner: [
-    { x: 10, y: 42 },
-    { x: 12, y: 48 },
+    { x: 14, y: 88 },
+    { x: 20, y: 88 },
   ],
 };
 
