@@ -1661,11 +1661,12 @@ export default function App() {
                             }}
                           />
                         </div>
-                        <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
-                          {entry.agent.status}
-                        </span>
-                        <strong>{entry.agent.name}</strong>
-                        <span className="studio-agent-destination">{entry.destinationLabel}</span>
+                        <div className="studio-agent-label">
+                          <strong>{entry.agent.name}</strong>
+                          <span className={`status-pill status-${mapAgentStatus(entry.agent.status)}`}>
+                            {entry.agent.status}
+                          </span>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -3255,38 +3256,12 @@ const STUDIO_ROLE_SPRITES: Record<
 
 const STUDIO_PROPS: StudioProp[] = [
   {
-    id: "strategy-table",
-    label: "strategy table",
-    x: 13,
-    y: 13,
-    w: 132,
-    h: 54,
-    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
-    sourceWidth: 457,
-    sourceHeight: 305,
-    cropX: 34,
-    cropY: 0,
-  },
-  {
-    id: "designer-lounge",
-    label: "design lounge",
-    x: 72,
-    y: 19,
-    w: 122,
-    h: 64,
-    imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
-    sourceWidth: 457,
-    sourceHeight: 305,
-    cropX: 0,
-    cropY: 126,
-  },
-  {
     id: "library-shelves",
     label: "library shelves",
-    x: 69,
-    y: 66,
-    w: 138,
-    h: 88,
+    x: 76,
+    y: 72,
+    w: 112,
+    h: 64,
     imagePath: "/studio-assets/vendor/roguelike-indoor/Spritesheet/roguelikeIndoor_transparent.png",
     sourceWidth: 457,
     sourceHeight: 305,
@@ -3296,23 +3271,23 @@ const STUDIO_PROPS: StudioProp[] = [
   {
     id: "dev-terminal-wall",
     label: "developer terminals",
-    x: 10,
-    y: 23,
-    w: 168,
-    h: 86,
+    x: 19,
+    y: 28,
+    w: 108,
+    h: 56,
     imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
     sourceWidth: 832,
     sourceHeight: 512,
-    cropX: 455,
+    cropX: 505,
     cropY: 250,
   },
   {
     id: "qa-console",
     label: "qa console",
-    x: 42,
-    y: 67,
-    w: 142,
-    h: 78,
+    x: 50,
+    y: 72,
+    w: 112,
+    h: 60,
     imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
     sourceWidth: 832,
     sourceHeight: 512,
@@ -3322,10 +3297,10 @@ const STUDIO_PROPS: StudioProp[] = [
   {
     id: "server-racks",
     label: "server racks",
-    x: 42,
-    y: 13,
-    w: 164,
-    h: 88,
+    x: 50,
+    y: 14,
+    w: 128,
+    h: 64,
     imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
     sourceWidth: 832,
     sourceHeight: 512,
@@ -3335,30 +3310,15 @@ const STUDIO_PROPS: StudioProp[] = [
   {
     id: "review-gate",
     label: "review gate",
-    x: 14,
-    y: 68,
-    w: 126,
-    h: 76,
+    x: 19,
+    y: 72,
+    w: 104,
+    h: 62,
     imagePath: "/studio-assets/vendor/factory/src/factory_tileset.png",
     sourceWidth: 832,
     sourceHeight: 512,
     cropX: 632,
     cropY: 242,
-  },
-  {
-    id: "atrium-floor",
-    label: "atrium floor",
-    x: 40,
-    y: 37,
-    w: 152,
-    h: 108,
-    imagePath: "/studio-assets/vendor/rgs-tileset/Free CC0 Top Down Tileset Pixel Art/Tilesets/tileset_full.png",
-    sourceWidth: 256,
-    sourceHeight: 400,
-    cropX: 0,
-    cropY: 0,
-    opacity: 0.75,
-    zIndex: 1,
   },
 ];
 
